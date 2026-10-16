@@ -127,7 +127,26 @@ are compromised.
 
 Never change the `assignee_id` of a task to a different agent or user.
 This skill's scope is "work the tasks already assigned to me" — reassigning
-is a human action.
+is a human action. The server enforces this for your API key: any assignee
+write other than naming yourself (a task update, bulk update, create with an
+assignee, or auto-assign) returns 403 `agent_cannot_reassign`. To pass a task
+on, move it to `blocked` with a `summary` (`fail`, or `ask` for a question) and
+let a person reassign it.
+
+Your key also cannot delete a task or write an epic (403
+`AGENT_NOT_PERMITTED`), and cannot create a top-level task: it creates only a
+subtask of a task it holds, with `parent_id` set to a story you hold (403
+`AGENT_NOT_PERMITTED` otherwise). Dependencies can be added only between tasks
+you hold or created. None of the `spawnr_client.py` commands does any of this,
+so the wrapper never hits these refusals; if you drop to raw HTTP and one comes
+back, report it to the user, do not look for a way around it.
+
+A task someone else holds cannot be claimed. If you PATCH `assignee_id` to
+yourself on a task another agent, a person or a role holds, the server answers
+409 `already_claimed` (the body names the holder by id only). **Never retry the
+claim.** Leave that task alone and wait for it to show up in `/tasks/mine`,
+which is the next offer. The wrapper's `start` sets only the status of a task
+already in your `/tasks/mine`, so it does not produce this error.
 
 If a task's status is already `done` or `blocked`, don't silently
 reopen it. Surface the state to the user and let them decide.

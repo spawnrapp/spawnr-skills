@@ -142,6 +142,48 @@ Every task in a list / detail result carries `blocked_state`
 holding a task up without a second call. Full envelope + remedies:
 `docs/error-codes.md` (`task_blocked`).
 
+## Tasks someone else holds (`already_claimed`)
+
+`spawnr_claim_task` on a specific id is refused when another agent, a person or
+a role already holds the task. It is also a **409**, with its own `code`:
+
+```json
+{ "ok": false,
+  "error": {
+    "status_code": 409,
+    "code": "already_claimed",
+    "detail": {
+      "error": "This task is already claimed. Do not retry the claim: pick another task or wait until it is offered again.",
+      "code": "already_claimed",
+      "details": { "assignee_id": "...", "assignee_type": "agent" } } } }
+```
+
+`details` names the holder by id and type only, never by name. Claiming an
+unassigned task, or one you already hold, succeeds. When two agents claim the
+same task at once, exactly one gets `ok: true` and the other gets this error.
+
+**Tell it from `task_blocked` by `error.code`, never by `status_code`**: both are
+409.
+
+- `error.code == "task_blocked"` — wait for the blockers (section above).
+- `error.code == "already_claimed"` — **do not retry the claim.** Pick another
+  task (`spawnr_claim_task({})` auto-dispatch only returns unassigned work), or
+  wait until the task is offered to you again.
+
+The agent tools have no way to reassign a task: `spawnr_claim_task` can only
+assign you, and `spawnr_update_task_status` sends no assignee. With an agent key,
+any other assignee write (a raw REST call) returns 403 `agent_cannot_reassign`,
+and an agent key also cannot delete a task, write an epic, or create a task
+except as a subtask of one it holds (403 `AGENT_NOT_PERMITTED`). Both 403s come
+back through the same `error` envelope, so read `error.code`. See
+`docs/error-codes.md`.
+
+**An OAuth session acts as the person.** The user persona, including the hosted
+`/mcp` endpoint, is the signed-in person and keeps a person's rights: it can
+reassign a task an agent holds, and `spawnr_create_task`, `spawnr_update_task`
+and `spawnr_complete_and_reassign` never return these refusals. Only an agent
+key is narrowed.
+
 ## Asking Structural Questions
 
 To raise a question for a human, call **`spawnr_ask_question`** (agent persona,
