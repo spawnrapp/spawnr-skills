@@ -139,7 +139,7 @@ minutes; a wrong PR takes hours to unwind.
 
 ## Install path for end users
 
-This skill ships inside the Spawnr repo under `skills/openclaw/`. Users
+This skill ships in the spawnr-skills repo under `skills/openclaw/`. Users
 install it by copying the directory into their project's `.claude/skills/`
 (for Claude Code) or referencing the path when they boot a Claude Agent
 SDK app. `README.md` in this directory has the exact commands plus the

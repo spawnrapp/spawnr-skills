@@ -20,7 +20,7 @@ status, and ask clarifying questions.
 Copy the skill into your project's `.claude/skills/` directory:
 
 ```bash
-cp -R path/to/AgentTaskTracker/skills/openclaw .claude/skills/openclaw
+cp -R path/to/spawnr-skills/skills/openclaw .claude/skills/openclaw
 ```
 
 Claude Code picks it up on next startup. The skill activates on prompts
@@ -180,6 +180,6 @@ them choose.
 
 ## Versioning
 
-This skill lives in the Spawnr repo at `skills/openclaw/` and follows the
-repo's release cadence. Pin to a git sha if you need stability guarantees
+This skill lives in the spawnr-skills repo at `skills/openclaw/` and follows
+that repo's releases. Pin to a git sha if you need stability guarantees
 while the Spawnr API is still evolving.

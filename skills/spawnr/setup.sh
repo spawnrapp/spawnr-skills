@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Spawnr Skill Setup — installs CLI + MCP, configures agent environment.
-# Run once from a checkout: SPAWNR_LOCAL_DEV=/path/to/AgentTaskTracker bash skills/spawnr/setup.sh
+# Run once from a spawnr-skills checkout (SPAWNR_LOCAL_DEV = the AgentTaskTracker monorepo checkout): SPAWNR_LOCAL_DEV=/path/to/AgentTaskTracker bash skills/spawnr/setup.sh
 set -euo pipefail
 
 BOLD='\033[1m'
