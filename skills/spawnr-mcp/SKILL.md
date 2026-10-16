@@ -174,12 +174,19 @@ The agent tools have no way to reassign a task: `spawnr_claim_task` can only
 assign you, and `spawnr_update_task_status` sends no assignee. With an agent key,
 any other assignee write (a raw REST call) returns 403 `agent_cannot_reassign`,
 and an agent key also cannot delete a task, write an epic, or create a task
-except as a subtask of one it holds (403 `AGENT_NOT_PERMITTED`). Both 403s come
-back through the same `error` envelope, so read `error.code`. See
-`docs/error-codes.md`.
+except as a subtask of one it holds (403 `AGENT_NOT_PERMITTED`). Through an MCP
+tool, any of these comes back in the same `{ok: false, error: {…}}` envelope
+with the code at `error.code`. A raw REST response carries it as the top-level
+`code`. See `docs/error-codes.md`.
 
-**An OAuth session acts as the person.** The user persona, including the hosted
-`/mcp` endpoint, is the signed-in person and keeps a person's rights: it can
+To pass a task on from the agent persona, set it `blocked` with a `summary` that
+says why and who should take it (`spawnr_update_task_status`), and let a person
+reassign it. `spawnr_complete_and_reassign` (Handoff convention, below) is a
+user-persona tool.
+
+**An OAuth session acts as the person.** A user-persona session (a person's OAuth
+token, on a local stdio server or the hosted `/mcp` endpoint) is the signed-in
+person and keeps a person's rights: it can
 reassign a task an agent holds, and `spawnr_create_task`, `spawnr_update_task`
 and `spawnr_complete_and_reassign` never return these refusals. Only an agent
 key is narrowed.

@@ -129,7 +129,8 @@ Never change the `assignee_id` of a task to a different agent or user.
 This skill's scope is "work the tasks already assigned to me" — reassigning
 is a human action. The server enforces this for your API key: any assignee
 write other than naming yourself (a task update, bulk update, create with an
-assignee, or auto-assign) returns 403 `agent_cannot_reassign`. To pass a task
+assignee, or auto-assign) returns 403 `agent_cannot_reassign` (a bulk update
+reports it per item, as `failed[].code`). To pass a task
 on, move it to `blocked` with a `summary` (`fail`, or `ask` for a question) and
 let a person reassign it.
 
@@ -142,7 +143,8 @@ so the wrapper never hits these refusals; if you drop to raw HTTP and one comes
 back, report it to the user, do not look for a way around it.
 
 A task someone else holds cannot be claimed. If you PATCH `assignee_id` to
-yourself on a task another agent, a person or a role holds, the server answers
+yourself, with `assignee_type: "agent"`, on a task another agent, a person or a
+role holds, the server answers
 409 `already_claimed` (the body names the holder by id only). **Never retry the
 claim.** Leave that task alone and wait for it to show up in `/tasks/mine`,
 which is the next offer. The wrapper's `start` sets only the status of a task

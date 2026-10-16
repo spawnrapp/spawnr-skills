@@ -60,9 +60,9 @@ spawnr task claim                 # auto-claim next open task
 spawnr task claim --sprint 9.3    # claim from specific sprint
 ```
 
-After claiming, the task is `in_progress` and assigned to you. A task someone
-else holds cannot be claimed: that is `already_claimed` (see below), and you
-must not retry it.
+After claiming, the task is `in_progress` and assigned to you. With an agent key,
+a task someone else holds cannot be claimed: that is `already_claimed` (see
+below), and you must not retry it.
 
 ### Step 3: Do the Work
 
@@ -177,8 +177,8 @@ Every listed task carries its `blocked_state` (`none` / `waiting` / `stuck`); ad
 
 ## Tasks someone else holds (`already_claimed`)
 
-Claiming a task that another agent, a person or a role already holds is refused
-with a **409** whose `code` is `already_claimed`. Claiming an unassigned task,
+With an agent key, claiming a task that another agent, a person or a role already
+holds is refused with a **409** whose `code` is `already_claimed`. Claiming an unassigned task,
 or one that is already yours, works as usual. The error names the holder by id
 only (`details: {assignee_id, assignee_type}`), never by name. When two agents
 claim the same task at the same moment, exactly one wins and the other gets this
@@ -198,7 +198,10 @@ again` (exit 1, `code: conflict`). With an agent key that message can mean the
 task is held by someone else, and "try again" is wrong advice for it. Never wrap
 `spawnr task claim` in a retry loop on that message; stop, and wait for the next
 offer. The MCP tool `spawnr_claim_task` returns the real `already_claimed` code
-(see the `spawnr-mcp` skill).
+(see the `spawnr-mcp` skill). `spawnr task claim` takes no task id and always
+picks the oldest open task, held or not, so running it again hits the same task
+until a person closes or reassigns it. Narrow it with `--sprint`/`--workspace`,
+or claim over MCP, where `spawnr_claim_task({})` skips held tasks.
 
 ## What an agent key cannot do
 
@@ -207,18 +210,20 @@ agent key as an MCP bearer). The server enforces them, so none of the CLI or MCP
 commands above does any of this, and a raw API call is refused:
 
 - **Delete a task.** `DELETE /api/v1/tasks/{id}` returns 403 `AGENT_NOT_PERMITTED`.
-- **Create, edit or archive an epic.** Any epic write returns 403
+- **Create, edit or archive an epic.** Any write to the epic itself returns 403
   `AGENT_NOT_PERMITTED`.
 - **Create a top-level task.** An agent creates only a subtask of a task it holds:
   `parent_id` is required, and today the parent must be a story the agent holds.
-  Otherwise 403 `AGENT_NOT_PERMITTED`. Top-level tasks are created by people.
+  Without `parent_id`, or with a story it does not hold, it is 403
+  `AGENT_NOT_PERMITTED` (a parent that is not a story is 422). Top-level tasks are
+  created by people.
 - **Assign a task to anyone but itself, or clear its own assignee.** That covers
   a task update, a bulk update, a create with an assignee, and auto-assign. All
-  return 403 `agent_cannot_reassign`. The only assignee write open to an agent
+  return 403 `agent_cannot_reassign` (a bulk update reports it per item, as
+  `failed[].code`). The only assignee write open to an agent
   is claiming a task for itself. To pass work on, mark the task `blocked` with a
   `summary` saying why and who should take it, and let a person reassign it.
-- **Add a dependency between tasks it neither holds nor created.** 403
-  `AGENT_NOT_PERMITTED`.
+- **Add a dependency unless it holds or created both tasks.** 403 `AGENT_NOT_PERMITTED`.
 
 If asked for one of these, say it needs a person and point them to the
 dashboard. People, the dashboard and a hosted `/mcp` session opened with a
@@ -340,7 +345,7 @@ On a local stdio server (`spawnr-mcp serve`), call `spawnr_auth` once — it ope
 
 ## Tips
 
-- **Always claim before working** — the server refuses a claim on a task someone else holds (`already_claimed`, above), so two agents cannot work the same task.
+- **Always claim before working** — the server refuses an agent key's claim on a task someone else holds (`already_claimed`, above), so two agents cannot work the same task.
 - **Post checkpoints** — they show up in the task activity feed and help teammates track progress.
 - **Use `--json` flag** for machine-readable output when piping CLI output.
 - **Ship with a PR URL** — links the task to the actual code change.
