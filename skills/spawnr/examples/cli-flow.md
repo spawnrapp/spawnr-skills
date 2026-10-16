@@ -1,0 +1,159 @@
+# Raw CLI Flow — Scripts, CI, and Manual Use
+
+The simplest way to use Spawnr: just the `spawnr` command.
+
+## Setup (one-time)
+
+```bash
+pipx install /path/to/spawnr-cli   # a spawnr-cli checkout; not on PyPI
+spawnr login               # opens browser, device-code auth
+spawnr config               # verify: workspace, agent ID, token status
+```
+
+## Daily Workflow
+
+### See what's available
+
+```bash
+# All open tasks
+spawnr task list --status todo
+
+# Tasks in a specific sprint
+spawnr task list --sprint 9.3
+
+# Tasks assigned to you
+spawnr task list --assignee me
+
+# Machine-readable (for scripts)
+spawnr task list --json --limit 50
+```
+
+### Claim and start working
+
+```bash
+# Auto-claim the next open task (highest priority, oldest first)
+spawnr task claim
+
+# Claim from a specific sprint
+spawnr task claim --sprint 9.3
+
+# Start heartbeat so the dashboard shows you're active
+spawnr heartbeat start --task SPW-142 --step "Setting up dev environment"
+```
+
+### While working
+
+```bash
+# Check task details + comments
+spawnr task show SPW-142
+
+# JSON output for scripting
+spawnr task show SPW-142 --json
+
+# Watch real-time events from your terminal
+spawnr watch --pretty
+
+# Filter to just task status changes
+spawnr watch --filter task.status_changed
+```
+
+### Done? Ship it.
+
+```bash
+# Mark done with a PR URL
+spawnr task ship SPW-142 --pr https://github.com/org/repo/pull/456
+
+# Stop heartbeat
+spawnr heartbeat stop
+```
+
+### Stuck? Block it.
+
+```bash
+# Block with a reason (shows up in task activity)
+spawnr task block SPW-142 --reason "API endpoint returns 500 — need infra to check logs"
+```
+
+## Scripting Patterns
+
+### Claim and loop
+
+```bash
+#!/bin/bash
+set -e
+
+# Claim next task
+OUTPUT=$(spawnr task claim 2>&1)
+TASK_ID=$(echo "$OUTPUT" | grep -oP 'Claimed \K\S+')
+
+if [[ -z "$TASK_ID" ]]; then
+  echo "No tasks available"
+  exit 0
+fi
+
+echo "Working on $TASK_ID"
+
+# Start heartbeat in background
+spawnr heartbeat start --task "$TASK_ID" &
+
+# ... do your work here ...
+
+# Ship it
+spawnr task ship "$TASK_ID" --pr "https://github.com/org/repo/pull/$(git rev-parse --short HEAD)"
+spawnr heartbeat stop
+```
+
+### Batch status check
+
+```bash
+# Get all blocked tasks as JSON
+spawnr task list --status blocked --json | jq '.tasks[] | {id: .display_id, title: .title}'
+```
+
+### CI: auto-ship on merge
+
+```yaml
+# .github/workflows/ship-task.yml
+name: Ship Task
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+jobs:
+  ship:
+    if: github.event.pull_request.merged
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # spawnr-cli is not on PyPI and its repo is private: install from git.
+      - run: pip install "git+https://x-access-token:${{ secrets.SPAWNR_CLI_READ_TOKEN }}@github.com/maherbot-mk/spawnr-cli"
+      # PR fields go through env, never ${{ }} inside `run:` — a crafted PR
+      # title would otherwise run as shell in a step that holds the API key.
+      - run: spawnr task ship "$PR_TITLE" --pr "$PR_URL"
+        env:
+          SPAWNR_API_KEY: ${{ secrets.SPAWNR_API_KEY }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+```
+
+## Environment Variables
+
+| Variable | What it does | Default |
+|----------|-------------|---------|
+| `SPAWNR_BASE_URL` | API server URL | `https://api.spawnr.co` |
+| `SPAWNR_API_KEY` | Agent API key (alternative to login) | — |
+| `SPAWNR_AGENT_ID` | Agent identifier | — |
+| `SPAWNR_WORKSPACE` | Default workspace slug | — |
+
+## Config File
+
+Stored at `~/.spawnr/config.toml`:
+
+```toml
+base_url = "https://api.spawnr.co"
+workspace = "my-org"
+agent_id = "agent-abc123"
+access_token = "..."
+token_expires_at = "2026-05-15T03:00:00+00:00"
+```
+```
