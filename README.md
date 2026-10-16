@@ -1,8 +1,9 @@
 # spawnr-skills
 
 Installable agent skills for [Spawnr](https://spawnr.co). They moved here
-unchanged from `maherbot-mk/AgentTaskTracker` (`skills/`, at `3bcb6cb5`), and
-this repo is now the only copy: change them here.
+from `maherbot-mk/AgentTaskTracker` (`skills/`, at `3bcb6cb5`) with only the
+lines that say where they live updated, and this repo is now the only copy:
+change them here.
 
 | Skill | What it is for |
 |---|---|
@@ -12,7 +13,8 @@ this repo is now the only copy: change them here.
 
 ## Install
 
-This repo is private. Clone it with access to the `maherbot-mk` org:
+This repo is private. Clone it with a GitHub account that has access to
+`maherbot-mk/spawnr-skills`:
 
 ```bash
 git clone git@github.com:maherbot-mk/spawnr-skills.git
@@ -31,7 +33,8 @@ of `x` in place instead of the folder.
 ### `skills/spawnr/setup.sh`
 
 `setup.sh` installs the Spawnr CLI and MCP server, writes the MCP config to
-`~/.config/claude/mcp_settings.json` and starts `spawnr login`. Those packages
+`~/.config/claude/mcp_settings.json` and starts `spawnr login` unless
+`~/.spawnr/config.toml` already exists. Those packages
 are not on PyPI yet, so it installs them from local checkouts:
 
 | Variable | Required | Meaning |
@@ -52,6 +55,8 @@ nothing.
 python3 -m pytest skills/openclaw/tests/test_spawnr_client.py   # Python 3.10+, pytest
 ```
 
-The backend contract tests for these scripts live in the monorepo's
-`backend/tests/test_openclaw_*.py` and run when this repo is checked out beside
-it.
+The monorepo's backend tests that pin these skills
+(`backend/tests/test_openclaw_*.py` and `test_docs_status_summary_contract.py`)
+read this repo from a `spawnr-skills` checkout beside the monorepo, or from
+`SPAWNR_SKILLS_DIR` set to this repo's `skills/` folder; without either they
+skip.
