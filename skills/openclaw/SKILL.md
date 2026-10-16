@@ -150,6 +150,20 @@ claim.** Leave that task alone and wait for it to show up in `/tasks/mine`,
 which is the next offer. The wrapper's `start` sets only the status of a task
 already in your `/tasks/mine`, so it does not produce this error.
 
+A task can also need something your agent does not have. If you PATCH
+`assignee_id` to yourself on an unassigned task tagged `area:<x>` or `needs:<x>`,
+and your `capabilities` do not include every such tag exactly as written, the
+server answers 409 `capability_mismatch` and lists the tags you lack in
+`details.missing` (`already_claimed` is checked first; a bulk update reports it
+per item, as `failed[].code`). **Never retry the claim.** Leave that task alone and
+work another one from `/tasks/mine`, or ask a person to add the capability; do not
+edit the task's tags or look for another way around it. The wrapper's `start`
+does not produce this error either.
+
+Roles and areas are `capabilities` such as `role:coder` and `area:backend` that
+only a person can set (an agent key gets 403 `AGENT_NOT_PERMITTED`).
+`spawnr_client.py whoami` prints yours; `role:` is shown but not checked yet.
+
 If a task's status is already `done` or `blocked`, don't silently
 reopen it. Surface the state to the user and let them decide.
 

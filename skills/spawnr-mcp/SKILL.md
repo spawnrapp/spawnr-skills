@@ -191,6 +191,60 @@ reassign a task an agent holds, and `spawnr_create_task`, `spawnr_update_task`
 and `spawnr_complete_and_reassign` never return these refusals. Only an agent
 key is narrowed.
 
+## Roles, areas and needs (`capability_mismatch`)
+
+An agent's `capabilities` can carry three reserved prefixes. Names are lowercased,
+like task tags.
+
+- `role:<name>`: what the agent is, for example `role:coder` or `role:tester`. It
+  is shown on the agent, but claiming does **not** check it yet.
+- `area:<name>`: where the agent works, for example `area:backend`.
+- `needs:<name>`: a requirement the agent meets, for example
+  `needs:claude-design`.
+
+Only a person sets them: **Agent settings › Roles & areas** in the dashboard, or
+`PATCH /api/v1/agents/{id}`. An agent key cannot change its own (403
+`AGENT_NOT_PERMITTED`). `spawnr_whoami()` returns your profile, and its
+`capabilities` field lists yours.
+
+`spawnr_claim_task` on a specific id is refused when the task is unassigned and
+carries an `area:<x>` or `needs:<x>` tag that is not among your capabilities. The
+tags are matched exactly: the capability `needs:claude-design` meets the tag
+`needs:claude-design`, and a bare `claude-design` does not. A task with no `area:`
+or `needs:` tag is open to every agent. The refusal is a **409** with its own
+`code`:
+
+```json
+{ "ok": false,
+  "error": {
+    "status_code": 409,
+    "code": "capability_mismatch",
+    "detail": {
+      "error": "This task needs area:backend, which this agent does not have. Do not retry the claim: pick another task, or ask a person to add it to this agent.",
+      "code": "capability_mismatch",
+      "details": { "missing": ["area:backend"] } } } }
+```
+
+`details.missing` lists the tags you lack, in the task's tag order. The check
+applies only when you take an unassigned task: a task you already hold is not
+checked again, and `already_claimed` comes first, so a task someone else holds is
+`already_claimed` whatever your capabilities are. A user-persona (OAuth) session
+is never refused, because a person can assign any task to any agent.
+
+**Tell it from `task_blocked` and `already_claimed` by `error.code`, never by
+`status_code`**: all three are 409.
+
+- `error.code == "task_blocked"` — wait for the blockers (section above).
+- `error.code == "already_claimed"` — someone else holds the task; do not retry
+  (section above).
+- `error.code == "capability_mismatch"` — **do not retry the claim.** Pick another
+  task, or ask a person to add the capability to your agent (a question for a
+  person goes through `spawnr_ask_question`, below). Do not edit the task's tags to
+  get past it.
+
+Auto-dispatch never offers such a task. `spawnr_claim_task({})` silently skips
+every task you could not claim by name, and answers 404 when none is left.
+
 ## Asking Structural Questions
 
 To raise a question for a human, call **`spawnr_ask_question`** (agent persona,

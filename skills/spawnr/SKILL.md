@@ -62,7 +62,9 @@ spawnr task claim --sprint 9.3    # claim from specific sprint
 
 After claiming, the task is `in_progress` and assigned to you. With an agent key,
 a task someone else holds cannot be claimed: that is `already_claimed` (see
-below), and you must not retry it.
+below), and you must not retry it. Nor can an unassigned task tagged
+`area:`/`needs:` that your agent lacks: that is `capability_mismatch` (see
+below), also not to be retried.
 
 ### Step 3: Do the Work
 
@@ -202,6 +204,58 @@ offer. The MCP tool `spawnr_claim_task` returns the real `already_claimed` code
 picks the oldest open task, held or not, so running it again hits the same task
 until a person closes or reassigns it. Narrow it with `--sprint`/`--workspace`,
 or claim over MCP, where `spawnr_claim_task({})` skips held tasks.
+
+## Roles, areas and needs (`capability_mismatch`)
+
+An agent's `capabilities` can carry three reserved prefixes. Names are lowercased,
+like task tags.
+
+- `role:<name>`: what the agent is, for example `role:coder` or `role:tester`. It
+  is shown on the agent, but claiming does **not** check it yet.
+- `area:<name>`: where the agent works, for example `area:backend`.
+- `needs:<name>`: a requirement the agent meets, for example
+  `needs:claude-design`.
+
+Only a person sets them: **Agent settings › Roles & areas** in the dashboard, or
+`PATCH /api/v1/agents/{id}` with `{"capabilities": [...]}`, which replaces the
+whole list. An agent key cannot change its own (403 `AGENT_NOT_PERMITTED`). See
+yours with `spawnr agent me -o json`, in the `capabilities` field.
+
+**The rule.** With an agent key, you can claim an unassigned task only if every
+`area:<x>` and `needs:<x>` tag on it is among your capabilities, matched exactly:
+the capability `needs:claude-design` meets the tag `needs:claude-design`, and a
+bare `claude-design` does not. A task with no `area:` or `needs:` tag is open to
+every agent. Otherwise the claim is refused with a **409** whose `code` is
+`capability_mismatch`, and `details.missing` lists the tags you lack, in the
+task's tag order.
+
+The check applies only when you take an unassigned task. A task you already hold
+is not checked again, and `already_claimed` comes first: a task someone else holds
+is `already_claimed` whatever your capabilities are. People, and a hosted `/mcp`
+session opened with a person's OAuth token, are never refused, because a person can
+assign any task to any agent.
+
+**Do not retry the claim.** Asking again cannot change the answer. Pick another
+task, or ask a person to add the capability to your agent. Do not edit the task's
+tags to get past it.
+
+`task_blocked` and `already_claimed` are also 409s, so tell the three apart by
+`code`, not by the status: `task_blocked` means wait for the blockers,
+`already_claimed` means someone else has the task, `capability_mismatch` means
+this agent is not set up for the task.
+
+**Auto-claim never offers such a task.** The server's own pick (the MCP tool
+`spawnr_claim_task({})`, or dispatch with `auto`) silently skips every task you
+could not claim by name, and answers 404 when none is left.
+
+**The CLI hides the difference here too.** `spawnr task claim` reports this 409 as
+`Task was updated by another agent — try again` (exit 1, `code: conflict`), the
+same text it gives `already_claimed`, and "try again" is wrong advice for it. Never
+wrap `spawnr task claim` in a retry loop on that message. `spawnr task claim` takes
+no task id and picks the oldest open task without looking at your capabilities, so
+with areas in use it can choose the same task you may not take on every run (a
+known CLI problem, tracked in spawnr-cli#198). Claim over MCP, where
+`spawnr_claim_task({})` skips such tasks, or stop and tell the person.
 
 ## What an agent key cannot do
 
