@@ -257,6 +257,47 @@ with areas in use it can choose the same task you may not take on every run (a
 known CLI limitation). Claim over MCP, where
 `spawnr_claim_task({})` skips such tasks, or stop and tell the person.
 
+## Proposing a subtask (`proposal_not_approved`)
+
+An agent key adds work only as a child of a story, task or bug it holds, and the
+child is a **proposal**: `proposal_state: "pending"`, which no agent can claim
+until a person approves it.
+
+- **MCP (preferred):** `spawnr_propose_subtask({"task_id": "SPW-12", "title": "...",
+  "description": "...", "area": "backend"})`. `task_id` is the parent you hold;
+  `description` and `area` are optional, and `area` is stored as the tag
+  `area:<x>`. See the `spawnr-mcp` skill.
+- **REST:** `POST /api/v1/tasks` with `title`, `workspace_id` (the parent's
+  workspace) and `parent_id` (the item you hold). The response carries
+  `proposal_state`. Do not set yourself as `assignee_id` in the same request: that
+  is a claim, so it is refused (409 `proposal_not_approved`) and nothing is
+  created.
+- **CLI:** there is **no propose command**. `spawnr task create` takes no
+  `--parent`, so with an agent key it is refused (403 `AGENT_NOT_PERMITTED`). Use
+  the MCP tool or the REST call.
+
+**What happens next.** A person with the approve right decides it on the
+**Approvals** page, under **Agent proposals**. Approved
+(`proposal_state: "approved"`), it is an ordinary unassigned task that can be
+claimed under the usual rules. Rejected (`proposal_state: "rejected"`), it is
+canceled and the person's reason is posted as a comment on it. An agent whose
+trust level is `autonomous` has its proposal approved at once. Read
+`proposal_state` with `spawnr task show <ID> --json` (the default panel view does
+not print it) or `spawnr_show_task` over MCP; it is `null` on any task that is not
+a proposal. The rejection reason is in the comments.
+
+**Claiming a proposal early is a 409** with `code` `proposal_not_approved`, and
+`details.proposal_state` is `pending` or `rejected`. **Do not retry the claim.**
+Pick another task, or wait until a person approves it; a rejected proposal will
+never be approved. Tell it from the other claim 409s (`task_blocked`,
+`already_claimed`, `capability_mismatch`) by `code`, not by the status.
+Auto-claim (the MCP tool `spawnr_claim_task({})`, or dispatch with `auto`) never
+offers a proposal a person has not approved, and `spawnr task claim` picks from
+the task list, which leaves pending proposals out.
+
+A person's session, and a hosted `/mcp` session opened with a person's OAuth
+token, creates tasks directly (`spawnr_create_task`) and gets no proposal.
+
 ## What an agent key cannot do
 
 These limits apply to an **agent key** (`SPAWNR_API_KEY` / `X-API-Key`, or the
@@ -266,11 +307,11 @@ commands above does any of this, and a raw API call is refused:
 - **Delete a task.** `DELETE /api/v1/tasks/{id}` returns 403 `AGENT_NOT_PERMITTED`.
 - **Create, edit or archive an epic.** Any write to the epic itself returns 403
   `AGENT_NOT_PERMITTED`.
-- **Create a top-level task.** An agent creates only a subtask of a task it holds:
-  `parent_id` is required, and today the parent must be a story the agent holds.
-  Without `parent_id`, or with a story it does not hold, it is 403
-  `AGENT_NOT_PERMITTED` (a parent that is not a story is 422). Top-level tasks are
-  created by people.
+- **Create a top-level task, or a story.** An agent adds work only as a
+  *proposal* (see "Proposing a subtask" above): a task or bug whose `parent_id` is
+  a story, task or bug it holds. Without `parent_id`, or with an item it does not
+  hold, it is 403 `AGENT_NOT_PERMITTED`. An agent cannot create a story at all.
+  Top-level tasks and stories are created by people.
 - **Assign a task to anyone but itself, or clear its own assignee.** That covers
   a task update, a bulk update, a create with an assignee, and auto-assign. All
   return 403 `agent_cannot_reassign` (a bulk update reports it per item, as
@@ -349,6 +390,7 @@ has no way to check your read against what was actually decided.
 | `spawnr_update_task_status` | Transition task: open → in_progress → done/blocked |
 | `spawnr_post_checkpoint` | Post progress checkpoint (reasoning, artifact, progress, error) |
 | `spawnr_ask_question` | Ask a human a question (agent persona); it waits in their Questions inbox |
+| `spawnr_propose_subtask` | Propose a subtask under a task you hold (agent persona); a person must approve it before anyone can claim it |
 | `spawnr_start_heartbeat` | Start background heartbeat pings (local stdio server only) |
 | `spawnr_stop_heartbeat` | Stop heartbeat and send final idle beat (local stdio server only) |
 | `spawnr_export_memory` | Export completed tasks as Markdown for next-session context |
