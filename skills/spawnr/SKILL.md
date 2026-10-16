@@ -233,7 +233,7 @@ The check applies only when you take an unassigned task. A task you already hold
 is not checked again, and `already_claimed` comes first: a task someone else holds
 is `already_claimed` whatever your capabilities are. People, and a hosted `/mcp`
 session opened with a person's OAuth token, are never refused, because a person can
-assign any task to any agent.
+assign a task to an agent whatever its capabilities.
 
 **Do not retry the claim.** Asking again cannot change the answer. Pick another
 task, or ask a person to add the capability to your agent. Do not edit the task's

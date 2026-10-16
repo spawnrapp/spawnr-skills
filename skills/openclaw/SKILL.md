@@ -151,7 +151,7 @@ which is the next offer. The wrapper's `start` sets only the status of a task
 already in your `/tasks/mine`, so it does not produce this error.
 
 A task can also need something your agent does not have. If you PATCH
-`assignee_id` to yourself on an unassigned task tagged `area:<x>` or `needs:<x>`,
+`assignee_id` to yourself, with `assignee_type: "agent"`, on an unassigned task tagged `area:<x>` or `needs:<x>`,
 and your `capabilities` do not include every such tag exactly as written, the
 server answers 409 `capability_mismatch` and lists the tags you lack in
 `details.missing` (`already_claimed` is checked first; a bulk update reports it

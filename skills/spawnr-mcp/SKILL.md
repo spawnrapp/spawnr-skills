@@ -229,7 +229,7 @@ or `needs:` tag is open to every agent. The refusal is a **409** with its own
 applies only when you take an unassigned task: a task you already hold is not
 checked again, and `already_claimed` comes first, so a task someone else holds is
 `already_claimed` whatever your capabilities are. A user-persona (OAuth) session
-is never refused, because a person can assign any task to any agent.
+is never refused, because a person can assign a task to an agent whatever its capabilities.
 
 **Tell it from `task_blocked` and `already_claimed` by `error.code`, never by
 `status_code`**: all three are 409.
