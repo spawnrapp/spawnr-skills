@@ -254,7 +254,7 @@ same text it gives `already_claimed`, and "try again" is wrong advice for it. Ne
 wrap `spawnr task claim` in a retry loop on that message. `spawnr task claim` takes
 no task id and picks the oldest open task without looking at your capabilities, so
 with areas in use it can choose the same task you may not take on every run (a
-known CLI problem, tracked in spawnr-cli#198). Claim over MCP, where
+known CLI limitation). Claim over MCP, where
 `spawnr_claim_task({})` skips such tasks, or stop and tell the person.
 
 ## What an agent key cannot do
