@@ -269,9 +269,9 @@ until a person approves it.
   `area:<x>`. See the `spawnr-mcp` skill.
 - **REST:** `POST /api/v1/tasks` with `title`, `workspace_id` (the parent's
   workspace) and `parent_id` (the item you hold). The response carries
-  `proposal_state`. Do not set yourself as `assignee_id` in the same request: that
-  is a claim, so it is refused (409 `proposal_not_approved`) and nothing is
-  created.
+  `proposal_state`. Do not set yourself as `assignee_id` in the same request unless your
+  trust is autonomous: on a pending proposal that is a claim, so it is refused
+  (409 `proposal_not_approved`) and nothing is created.
 - **CLI:** there is **no propose command**. `spawnr task create` takes no
   `--parent`, so with an agent key it is refused (403 `AGENT_NOT_PERMITTED`). Use
   the MCP tool or the REST call.

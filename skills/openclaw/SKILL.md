@@ -170,7 +170,7 @@ comment on it. If you PATCH `assignee_id` to yourself, with
 `rejected`), the server answers 409 `proposal_not_approved` and `details`
 carries the `proposal_state` (a bulk update reports it per item, as
 `failed[].code`). Naming yourself as the assignee in the create request is the
-same claim: 409, and nothing is created. **Never retry the claim.** Leave that
+same claim: unless your trust is autonomous, it is 409 and nothing is created. **Never retry the claim.** Leave that
 task alone and work another one from `/tasks/mine`; `spawnr_client.py get
 <task_id>` shows `proposal_state` once a person has decided. An approved
 proposal is an ordinary unassigned task. The wrapper has no create command and
