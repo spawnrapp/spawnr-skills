@@ -146,7 +146,7 @@ is later deleted). A `poll_tasks.py` handler gets the raw task dict, so
 
 **Close it when you're finished.** The routine creates its next task only
 after this one is closed: `done`, `canceled` with a `summary` (the same rule
-as step 3 above), or any other terminal status of the workspace's workflow.
+as step 3 above; a task in a flow phase needs a handoff instead), or any other terminal status of the workspace's workflow.
 While the task is still `open`, `in_progress`, `in_review` or `blocked`, each
 run that comes due is **skipped**, not queued. `fail` and `ask` set the task
 to `blocked`, and `poll_tasks.py` leaves it `blocked` or in review when a
