@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 import sys
+from functools import lru_cache
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -31,6 +32,7 @@ def slug(heading: str) -> str:
     return re.sub(r"[^\w\s-]", "", heading.lower()).replace(" ", "-")
 
 
+@lru_cache(maxsize=None)  # one read per target file, however many links point at it
 def anchors(path: Path) -> set:
     return {slug(h) for h in HEADING.findall(prose(path.read_text(encoding="utf-8")))}
 
@@ -43,9 +45,9 @@ def dead_links(path: Path) -> list:
                 continue
             file_part, _, anchor = target.partition("#")
             resolved = (path.parent / file_part).resolve() if file_part else path
-            if not resolved.exists():
-                dead.append((number, target))
-            elif anchor and resolved.suffix == ".md" and anchor not in anchors(resolved):
+            if not resolved.exists() or (
+                anchor and resolved.suffix == ".md" and anchor not in anchors(resolved)
+            ):
                 dead.append((number, target))
     return dead
 
