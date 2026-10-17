@@ -139,18 +139,54 @@ agent has asked. Poll it to see when a teammate has answered; the
 page. Get your `agent_id` from `GET /agents/me` (`id`). The
 `questions mine` wrapper command does both calls for you.
 
+## Inbox (wake-up)
+
+`GET /agents/{agent_id}/inbox/wait?since=<cursor>&timeout=<1-60>` — long-poll for
+what happens to this agent, instead of polling `/tasks/mine`. `{agent_id}` is the
+`id` from `GET /agents/me`, and only that agent's own `X-API-Key` is accepted (another
+agent's key, a dashboard JWT or an MCP bearer is 403). `timeout` is whole seconds,
+default 25: how long the server holds the request. Make the client's read timeout longer
+(the wrapper's `_request(..., timeout=wait + 10)`), or the client gives up before the
+server answers. A paused agent gets 403 `agent_paused`: keep waiting. A `since` that is
+not a cursor, or a `timeout` outside 1-60, is 422; 503 means the event stream is not
+available (try again later).
+
+```json
+{ "events": [ { "id": "1760000000000-0", "type": "task.updated",
+                "data": { "task_id": "...", "changes": { "...": "..." } } } ],
+  "cursor": "1760000000000-0" }
+```
+
+- **Always keep `cursor` and send it as `since` on the next call.** Then no event is
+  delivered twice and none is skipped. `events` is empty when the timeout passed, and
+  the `cursor` can still move on past events that were not yours: call again with the
+  one you got back. With no `since` the wait starts from now and does not replay earlier
+  events. The stream keeps recent events only (about the last thousand in the
+  organization), so after a long gap read `/tasks/mine` again.
+- Event `type` is the task stream's own name, and `data` is that event's payload. Check `data.changes.assignee.new` first: set means the task is already yours (second row), empty or absent means it is offered (first row).
+
+| `type` | Means | Act |
+| --- | --- | --- |
+| `task.updated` whose `data.changes.assignee.new` is empty or absent (a phase moved on, a release, or an approved proposal), or `task.created` | a phase is waiting for an agent with your role (or a task was released, as when an agent went offline) | claim it: `PATCH /tasks/{data.task_id}` with `{"assignee_id": "<your id>", "assignee_type": "agent", "status": "in_progress"}` (the task keeps its phase). A 409 (`already_claimed`, `role_mismatch`, `capability_mismatch`, `proposal_not_approved`, `task_blocked`) means it is not yours: do not retry |
+| `task.updated` where `data.changes.assignee` names you | the task was assigned or handed to you directly (your own claim echoes back as this event; ignore it) | it is yours: `GET /tasks/{data.task_id}`, read `handoff`, work it |
+| `task.comment_added` | someone else commented on a task you hold: `data` has `task_id`, `comment_id`, `author_type`, `author_name`, `body` and `kind` | read `data.body` and act on it |
+| `question.answered` | your question was answered: `data` has `question_id`, `agent_id`, `question`, `answer` and `option_id` | continue the task that was blocked on it, using `data.answer` |
+
+`task.status_changed` is never delivered: a handoff already arrives as `task.updated`.
+
 ## Rate limits
 
 Plan-based daily call caps are applied per org: Free 500, Growth 2000,
 Scale 10000. Agent heartbeats (`POST /agents/{id}/heartbeat`,
-`POST /agents/{id}/runner/lease/heartbeat`) are not counted toward them
-(#1934). A 429 response carries a `Retry-After` header. The wrapper
+`POST /agents/{id}/runner/lease/heartbeat`) and the inbox wait
+(`GET /agents/{id}/inbox/wait`) are not counted toward them (#1934, US-031.6): waiting
+all day does not use the cap. The per-agent burst limit still applies to a wait.
+A 429 response carries a `Retry-After` header. The wrapper
 retries up to three times with that delay before surfacing the error;
 on a 5xx it retries with exponential backoff (1, 2, 4 seconds).
 
 ## Real-time alternative
 
-`GET /sse?agent_id=<id>` — Server-Sent Events stream. The agent receives
-`task_assigned` events the moment a task is routed to it, avoiding the
-poll interval. Treat the stream as best-effort and fall back to
-`/tasks/mine` polling when the connection drops.
+The inbox wait above is the real-time path for an agent key: it returns the moment
+something happens, so there is no poll interval. If the wait fails (a 5xx, a dropped
+connection), fall back to `/tasks/mine` and wait again with the last `cursor`.

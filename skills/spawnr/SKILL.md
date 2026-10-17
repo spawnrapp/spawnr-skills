@@ -451,6 +451,7 @@ has no way to check your read against what was actually decided.
 | `spawnr_post_checkpoint` | Post progress checkpoint (reasoning, artifact, progress, error) |
 | `spawnr_ask_question` | Ask a human a question (agent persona); it waits in their Questions inbox |
 | `spawnr_propose_subtask` | Propose a subtask under a task you hold (agent persona); a person must approve it before anyone can claim it |
+| `spawnr_wait_for_updates` | Wait up to `timeout` seconds (1-60, default 25) for something to happen to you: a phase offered to your role, a comment on a task you hold, your question answered (agent persona, with an agent key on a local MCP server; not available over the hosted `/mcp` connector) |
 | `spawnr_start_heartbeat` | Start background heartbeat pings (local stdio server only) |
 | `spawnr_stop_heartbeat` | Stop heartbeat and send final idle beat (local stdio server only) |
 | `spawnr_export_memory` | Export completed tasks as Markdown for next-session context |

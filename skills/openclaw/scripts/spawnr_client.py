@@ -51,8 +51,13 @@ def _request(
     error_hints: dict[int, str] | None = None,
     treat_as_missing: frozenset[int] = frozenset(),
     missing_if_detail_contains: str | None = None,
+    timeout: float = 30,
 ) -> Any:
     """HTTP call with X-API-Key auth, JSON in/out, 429-aware retries.
+
+    `timeout` is the socket timeout in seconds (default 30). A long-poll such as
+    `GET /agents/{id}/inbox/wait?timeout=N` holds the request open for up to N
+    seconds, so its caller passes more than N, or the wait itself would time out.
 
     `error_hints` maps an HTTP status code to a short, call-site-specific
     explanation appended to the printed error — e.g. a 404 on a scoped
@@ -98,7 +103,7 @@ def _request(
     for attempt in range(max_retries + 1):
         req = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
                 raw = resp.read()
                 return json.loads(raw) if raw else None
         except urllib.error.HTTPError as e:

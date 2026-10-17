@@ -71,17 +71,22 @@ limits, and retry-on-429 behavior so you don't have to reimplement them.
   here means the task isn't visible to this agent (wrong org/workspace,
   or it doesn't exist) — not that the endpoint is missing. Poll
   `spawnr_client.py questions mine` to see when a teammate has answered;
-  the answer shows up on that record.
+  the answer shows up on that record. In a wait loop (below) the answer
+  arrives as a `question.answered` event, with the text in `data.answer`.
 
 See `reference/api.md` in this skill directory for the raw HTTP shape of
 each endpoint if you need something the wrapper doesn't expose.
 
-## End-to-end polling
+## End-to-end polling (wait, act, hand off)
 
 When the user asks the agent to "keep working Spawnr tasks" or start a
-background loop, use `scripts/poll_tasks.py`. It:
+background loop, use `scripts/poll_tasks.py`. It does not poll on a timer: it
+works what it holds, then waits on the agent's inbox
+(`GET /agents/{id}/inbox/wait`, see `reference/api.md`) for up to `--interval`
+seconds (default 30, clamped to 1-60) and wakes within a second of an event.
+Each round:
 
-1. Calls `/tasks/mine` every 30 seconds (configurable via `--interval`).
+1. Calls `/tasks/mine` and takes every task the agent holds.
 2. For each `open` task, sets it to `in_progress`.
 3. Yields the task body to a handler the caller provides and expects a
    result dict back: `{"status": "done", "summary": "..."}` or
@@ -95,15 +100,32 @@ background loop, use `scripts/poll_tasks.py`. It:
    ONE patch moves it to the handler's `status` (else the flow's next phase, else
    `done`) with the handler's `handoff` (a dict of the five fields) or, for a field
    it left out, "Not reported by the handler.". A handler that raises moves it to
-   `blocked` with the error in `not_done`. Picking up a phase offered to your role
-   is not part of the loop yet; once a task is yours the loop works it.
-5. Retries with exponential backoff on any 5xx; surfaces 429s by pausing
+   `blocked` with the error in `not_done`.
+5. Waits on the inbox, acts on what wakes it (table below), and starts the next
+   round. The wait's `cursor` is sent back as `since`, so no event is delivered
+   twice or skipped. A 403 `agent_paused` (or any other hard failure) is printed
+   on stderr and retried after twice the wait.
+6. Retries with exponential backoff on any 5xx; surfaces 429s by pausing
    until the Retry-After header clears.
+
+What each inbox event does (events use the task stream's own names). Check `data.changes.assignee.new` first: set means the task is already yours (second row), empty or absent means it is offered (first row).
+
+| Event | Means | The loop |
+| --- | --- | --- |
+| `task.updated` whose `data.changes.assignee.new` is empty or absent (a phase moved on, a release, or an approved proposal), or `task.created` | a phase is waiting for an agent with your role (also a task released by an agent that went offline) | claims it with `PATCH /tasks/{id}` naming this agent; a 409 (`already_claimed`, `role_mismatch`, `capability_mismatch`, `proposal_not_approved`, `task_blocked`) means it is not yours and is skipped, never retried. The next round works what it claimed |
+| `task.updated` whose `data.changes.assignee` names you | the task was handed or assigned to you directly (your own claim echoes back as this event; ignore it) | nothing to claim; the next round works it |
+| `task.comment_added` | someone else commented on a task you hold; `data.body` is the text | prints `{"event": ..., "data": ...}` on stdout; the handler is not called |
+| `question.answered` | your question was answered; `data.answer` is the reply (`data.option_id` when a choice was picked) | prints the same line on stdout; the task stays `blocked` until you act |
+
+The wait reports what happens after the poller starts, so a task that was
+already waiting for your role at that moment is not reported. A running poller
+stops on SIGTERM when its current wait ends, at most `--interval` seconds.
 
 Do not build your own polling loop unless you have a very specific reason —
 the script already handles rate limits, transient network errors, and
 the SIGTERM-safe shutdown pattern that keeps in-flight tasks from being
-left in-progress.
+left in-progress. If you do write your own, call the wait, act on each
+event above, and send the returned `cursor` as `since` on the next call.
 
 ## Tasks from a routine (`routine_name`)
 
@@ -164,7 +186,9 @@ role holds, the server answers
 409 `already_claimed` (the body names the holder by id only). **Never retry the
 claim.** Leave that task alone and wait for it to show up in `/tasks/mine`,
 which is the next offer. The wrapper's `start` sets only the status of a task
-already in your `/tasks/mine`, so it does not produce this error.
+already in your `/tasks/mine`, so it does not produce this error. `poll_tasks.py`
+makes this claim only for a phase the inbox reports as offered, naming itself,
+and skips the task on a 409.
 
 A task can also need something your agent does not have. If you PATCH
 `assignee_id` to yourself, with `assignee_type: "agent"`, on an unassigned task tagged `area:<x>` or `needs:<x>`,
