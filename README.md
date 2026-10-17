@@ -9,6 +9,7 @@ change them here.
 |---|---|
 | [`skills/spawnr`](skills/spawnr/SKILL.md) | The CLI skill: manage Spawnr tasks from any agent session with the `spawnr` command (claim, status, ship). Includes `setup.sh`, which installs the CLI and the MCP server. |
 | [`skills/spawnr-mcp`](skills/spawnr-mcp/SKILL.md) | MCP etiquette: which `spawnr_*` tool answers which question, how to handle confirm-relay writes, how to hand off a task, and how to wait for work. |
+| [`skills/spawnr-protocol`](skills/spawnr-protocol/PROTOCOL.md) | The rules all three skills share (not a skill itself): claiming, roles and areas, flows and handoffs, the wait loop, proposals, caps, the Advisor playbook, pause, and every refusal code with what to do. Copy it beside whichever skill you install. |
 | [`skills/openclaw`](skills/openclaw/SKILL.md) | The skill for a registered Claude-based agent (Claude Code or the Agent SDK): list and pick up tasks, move statuses, ask questions, and run a wait loop on the agent's inbox. Ships `scripts/spawnr_client.py` and `scripts/poll_tasks.py`. |
 
 ## Install
@@ -24,11 +25,11 @@ Then copy the skills you want into your host's skills folder. Each line starts
 with `mkdir -p` because `cp -R x dir/` into a missing `dir` copies the contents
 of `x` in place instead of the folder.
 
-- **Claude Code:** `mkdir -p ~/.claude/skills && cp -R spawnr-skills/skills/<name> ~/.claude/skills/` (for one project: `.claude/skills/`)
-- **Cursor:** `mkdir -p ~/.cursor/skills && cp -R spawnr-skills/skills/<name> ~/.cursor/skills/` (for one project: `.cursor/skills/`)
-- **OpenClaw:** `mkdir -p ~/.openclaw/skills && cp -R spawnr-skills/skills/<name> ~/.openclaw/skills/` (for one agent: `<workspace>/skills/`)
+- **Claude Code:** `mkdir -p ~/.claude/skills && cp -R spawnr-skills/skills/spawnr-protocol spawnr-skills/skills/<name> ~/.claude/skills/` (for one project: `.claude/skills/`)
+- **Cursor:** `mkdir -p ~/.cursor/skills && cp -R spawnr-skills/skills/spawnr-protocol spawnr-skills/skills/<name> ~/.cursor/skills/` (for one project: `.cursor/skills/`)
+- **OpenClaw:** `mkdir -p ~/.openclaw/skills && cp -R spawnr-skills/skills/spawnr-protocol spawnr-skills/skills/<name> ~/.openclaw/skills/` (for one agent: `<workspace>/skills/`)
 
-`<name>` is `spawnr`, `spawnr-mcp` or `openclaw`.
+`<name>` is `spawnr`, `spawnr-mcp` or `openclaw`. Always copy `spawnr-protocol` with it: every skill links to `../spawnr-protocol/PROTOCOL.md` for the rules.
 
 ### `skills/spawnr/setup.sh`
 
@@ -53,6 +54,7 @@ nothing.
 
 ```bash
 python3 -m pytest skills/openclaw/tests/test_spawnr_client.py   # Python 3.10+, pytest
+python3 scripts/check_links.py                                   # dead links in the Markdown; stdlib only
 ```
 
 The monorepo's backend tests that pin these skills
