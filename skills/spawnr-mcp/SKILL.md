@@ -361,8 +361,9 @@ An id that is not a flow of the task's workspace and item type, or is malformed,
 `spawnr_update_task` take `flow`: a flow id, or `"none"` for no flow. Leave it out
 and the task inherits by the order above. A person may set **any** flow of the
 task's item type, including one closed to agents. `spawnr_update_task` cannot send
-null, so to go back to inheriting, use the dashboard (Change flow) or the REST
-`PATCH` with `agent_flow_id: null`. Changing a flow keeps the task's status and
+null, so to go back to inheriting, send a raw REST `PATCH /api/v1/tasks/{task_id}`
+with `agent_flow_id: null`; the dashboard's Change flow menu offers the flows and
+"No flow", not "inherit". Changing a flow keeps the task's status and
 assignee, and writes an "Agent flow changed from … to …" row in History.
 
 **Agent persona.** `spawnr_claim_task` takes `flow` too, and claims and sets the
