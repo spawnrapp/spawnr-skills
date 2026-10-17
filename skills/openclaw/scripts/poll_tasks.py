@@ -5,7 +5,7 @@ actionable -> claimed -> done pipeline, one legal workflow transition at a
 time.
 
 Each round lists the tasks this agent holds and works them, then WAITS on the
-agent's inbox (`GET /agents/{id}/inbox/wait`) for up to `--interval` seconds
+agent's inbox (`GET /agents/{id}/inbox/wait`) for up to `--timeout` seconds
 instead of sleeping, so an offered phase, a comment on a task it holds or an
 answer to its question wakes the loop within a second. See `_handle_inbox_event`
 for what each event does.
@@ -22,10 +22,11 @@ has a legal path there) with the exception message, so a crash doesn't leave
 the task silently stuck.
 
 A task the agent holds in an agent-flow phase (`phase_role` set) is not claimed
-again. The handler may return `{"status": "testing", "handoff": {"done": ...,
-"not_done": ..., "decisions": ..., "open_questions": ..., "for_next": ...}}`; with
-no `status` the task moves to the flow's next phase (else `done`), and any handoff
-field left out is filled with "Not reported by the handler.".
+again. The handler gets the task detail, pinned `handoff` included, and may return
+`{"status": "testing", "handoff": {"done": ..., "not_done": ..., "decisions": ...,
+"open_questions": ..., "for_next": ...}}`; with no `status` the task moves to the
+flow's next phase (else `done`), and any handoff field left out is filled with
+"Not reported by the handler.".
 
 Environment variables:
   SPAWNR_API_URL        required
@@ -37,7 +38,7 @@ Event lines: a comment or an answer is printed to stdout as one JSON line,
 handler is not called for it. Work results stay `{"task_id": ..., "result": ...}`.
 
 Example:
-  poll_tasks.py --handler my_agent:handle --interval 30
+  poll_tasks.py --handler my_agent:handle --timeout 30
   poll_tasks.py --handler my_agent:handle --statuses backlog,needs_triage
 """
 
@@ -1092,12 +1093,10 @@ def _normalize_outcome(
 _NOT_REPORTED = "Not reported by the handler."
 
 
-def _next_phase(task_id: str, current_status: Optional[str]) -> tuple[str, str]:
-    """`(status, role)` of the phase after `current_status` in the task's agent flow, read
-    from `GET /tasks/{id}` `agent_flow.phases`; `("done", "")` when it is the last phase
-    or the flow cannot be read."""
-    flow = (_request("GET", f"/tasks/{task_id}") or {}).get("agent_flow") or {}
-    phases = flow.get("phases") or []
+def _next_phase(flow: Optional[dict], current_status: Optional[str]) -> tuple[str, str]:
+    """`(status, role)` of the phase after `current_status` in `flow` (the task's
+    `agent_flow`); `("done", "")` when it is the last phase or there is no flow."""
+    phases = (flow or {}).get("phases") or []
     keys = [p.get("status_key") for p in phases]
     if current_status in keys and keys.index(current_status) + 1 < len(phases):
         following = phases[keys.index(current_status) + 1]
@@ -1117,8 +1116,13 @@ def _work_phased_task(task: dict, handler: Callable[[dict], dict]) -> None:
       or blank filled with "Not reported by the handler."; `done` falls back to the
       handler's `summary`, and `for_next` to the role of the phase it hands to;
     * a handler that raises moves the task to `blocked` with the error in `not_done`.
+
+    The handler gets the task detail, pinned `handoff` included.
     """
     task_id = task.get("id") or task.get("_id")
+    # The pinned `handoff` and `agent_flow` come only with the task detail, not the
+    # /tasks/mine row, so read it once: the handler starts from the last phase's handoff.
+    task = {**task, **(_request("GET", f"/tasks/{task_id}") or {})}
     failure = None
     try:
         result = handler(task) or {}
@@ -1129,7 +1133,7 @@ def _work_phased_task(task: dict, handler: Callable[[dict], dict]) -> None:
     target = result.get("status")
     next_role = ""
     if not target:
-        target, next_role = _next_phase(task_id, task.get("status"))
+        target, next_role = _next_phase(task.get("agent_flow"), task.get("status"))
     fallback = {field: _NOT_REPORTED for field, _flag in _HANDOFF_FIELDS}
     fallback["done"] = (result.get("summary") or "Completed by openclaw handler.").strip()
     fallback["for_next"] = next_role or (
@@ -1420,8 +1424,9 @@ def _handle_inbox_event(me: str, event: dict) -> None:
     * `task.created` without `changes`, or `task.updated` that did not assign the task: a
       phase offered to this agent's role. Claim it (the same PATCH `spawnr_claim_task`
       sends). A 409 (`already_claimed`, `role_mismatch`, `capability_mismatch`,
-      `proposal_not_approved`, `task_blocked`) means it is not ours: skip it, never retry. A
-      claimed task shows up in the next `/tasks/mine` listing and is worked there.
+      `proposal_not_approved`, `task_blocked`, `blocked_by_cap`) means it is not ours: skip
+      it, never retry. A claimed task shows up in the next `/tasks/mine` listing and is
+      worked there.
     * `task.created` or `task.updated` carrying `changes.assignee.new`: the task was created
       for this agent or assigned to it (the inbox only carries its own), so it is already
       ours and there is nothing to claim; the next listing works it.
@@ -1512,10 +1517,12 @@ def main() -> None:
         "--handler", required=True, help="'module:function' importable callable"
     )
     p.add_argument(
-        "--interval",
+        "--timeout",
+        "--interval",  # the old name: the in-app OpenClaw docs card still sends it
+        dest="timeout",
         type=int,
         default=30,
-        help="seconds to wait on the inbox each round, clamped to 1-60 (default 30). "
+        help="seconds each inbox wait is held open, clamped to 1-60 (default 30). "
         "An idle poller stops on SIGTERM within this long.",
     )
     p.add_argument("--workspace", help="override SPAWNR_WORKSPACE_ID for this run")
@@ -1538,7 +1545,7 @@ def main() -> None:
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
 
-    wait_s = max(1, min(args.interval, 60))
+    wait_s = max(1, min(args.timeout, 60))
     me: Optional[str] = None
     cursor: Optional[str] = None
     while not _stopping:

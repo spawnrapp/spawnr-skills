@@ -12,6 +12,10 @@ command-line workflow; this one covers using the **MCP tools** well from an agen
 session: which tool answers which question, and the etiquette the write tools
 require.
 
+## The agent protocol (read it first)
+
+Before you claim, hand off or wait, read [`../spawnr-protocol/PROTOCOL.md`](../spawnr-protocol/PROTOCOL.md): the rules every Spawnr skill shares (claiming, roles and areas, flows and handoffs, the wait loop, proposals, caps, the Advisor playbook, pause, and every refusal code with what to do). Install `spawnr-protocol` beside this skill. This skill covers doing those things with the `spawnr_*` MCP tools.
+
 ## When to Use
 
 Activate this skill when the user wants to:
@@ -159,10 +163,9 @@ Every task in a list / detail result carries `blocked_state`
 holding a task up without a second call. Full envelope + remedies:
 `docs/error-codes.md` (`task_blocked`).
 
-## Tasks someone else holds (`already_claimed`)
+## Refusals over MCP
 
-`spawnr_claim_task` on a specific id is refused when another agent, a person or
-a role already holds the task. It is also a **409**, with its own `code`:
+Every refusal is `{ok:false, error:{status_code, code, detail:{error, code, details}}}`. Read `error.code`, never `status_code` alone: several refusals share 409. What each code means and what to do is in the protocol's ["Refusal codes"](../spawnr-protocol/PROTOCOL.md#refusal-codes). For example, `spawnr_claim_task` on a specific id that another agent, a person or a role already holds:
 
 ```json
 { "ok": false,
@@ -175,18 +178,6 @@ a role already holds the task. It is also a **409**, with its own `code`:
       "details": { "assignee_id": "...", "assignee_type": "agent" } } } }
 ```
 
-`details` names the holder by id and type only, never by name. Claiming an
-unassigned task, or one you already hold, succeeds. When two agents claim the
-same task at once, exactly one gets `ok: true` and the other gets this error.
-
-**Tell it from `task_blocked` by `error.code`, never by `status_code`**: both are
-409.
-
-- `error.code == "task_blocked"` — wait for the blockers (section above).
-- `error.code == "already_claimed"` — **do not retry the claim.** Pick another
-  task (`spawnr_claim_task({})` auto-dispatch only returns unassigned work), or
-  wait until the task is offered to you again.
-
 The agent tools have no way to reassign a task: `spawnr_claim_task` can only
 assign you, and `spawnr_update_task_status` sends no assignee. With an agent key,
 any other assignee write (a raw REST call) returns 403 `agent_cannot_reassign`,
@@ -197,10 +188,10 @@ Through an MCP tool, any of these comes back in the same
 `{ok: false, error: {…}}` envelope with the code at `error.code`. A raw REST
 response carries it as the top-level `code`. See `docs/error-codes.md`.
 
-To pass a task on from the agent persona, set it `blocked` with a `summary` that
-says why and who should take it (`spawnr_update_task_status`), and let a person
-reassign it. `spawnr_complete_and_reassign` (Handoff convention, below) is a
-user-persona tool.
+To pass a task on from the agent persona: on a task with no flow, set it `blocked`
+with a `summary` that says why and who should take it (`spawnr_update_task_status`),
+and let a person reassign it; under a flow, hand off ([the protocol](../spawnr-protocol/PROTOCOL.md#handoffs)).
+`spawnr_complete_and_reassign` (Handoff convention, below) is a user-persona tool.
 
 **An OAuth session acts as the person.** A user-persona session (a person's OAuth
 token, on a local stdio server or the hosted `/mcp` endpoint) is the signed-in
@@ -211,59 +202,16 @@ key is narrowed.
 
 ## Roles, areas and needs (`capability_mismatch`)
 
-An agent's `capabilities` can carry three reserved prefixes. Names are lowercased,
-like task tags.
+The prefixes (`role:`, `area:`, `needs:`) and the claim rule (409 `capability_mismatch`) are in the protocol's ["Roles, areas and needs"](../spawnr-protocol/PROTOCOL.md#roles-areas-and-needs) and ["Claiming a task"](../spawnr-protocol/PROTOCOL.md#claiming-a-task).
 
-- `role:<name>`: what the agent is, for example `role:coder` or `role:tester`.
-  Claiming checks it under an agent flow: to claim a task waiting in a phase, or a
-  claim that moves a task into a phase, the agent needs that phase's role (409
-  `role_mismatch`, in "Phases and handoffs" below).
-- `area:<name>`: where the agent works, for example `area:backend`.
-- `needs:<name>`: a requirement the agent meets, for example
-  `needs:claude-design`.
-
-Only a person sets them: **Agent settings › Roles & areas** in the dashboard, or
+Only a person sets an agent's capabilities: **Agent settings › Roles & areas** in the dashboard, or
 `PATCH /api/v1/agents/{id}`. An agent key cannot change its own (403
 `AGENT_NOT_PERMITTED`). `spawnr_whoami()` returns your profile, and its
 `capabilities` field lists yours.
 
-`spawnr_claim_task` on a specific id is refused when the task is unassigned and
-carries an `area:<x>` or `needs:<x>` tag that is not among your capabilities. The
-tags are matched exactly: the capability `needs:claude-design` meets the tag
-`needs:claude-design`, and a bare `claude-design` does not. A task with no `area:`
-or `needs:` tag is open to every agent. The refusal is a **409** with its own
-`code`:
-
-```json
-{ "ok": false,
-  "error": {
-    "status_code": 409,
-    "code": "capability_mismatch",
-    "detail": {
-      "error": "This task needs area:backend, which this agent does not have. Do not retry the claim: pick another task, or ask a person to add it to this agent.",
-      "code": "capability_mismatch",
-      "details": { "missing": ["area:backend"] } } } }
-```
-
-`details.missing` lists the tags you lack, in the task's tag order. The check
-applies only when you take an unassigned task: a task you already hold is not
-checked again, and `already_claimed` comes first, so a task someone else holds is
-`already_claimed` whatever your capabilities are. A user-persona (OAuth) session
-is never refused, because a person can assign a task to an agent whatever its capabilities.
-
-**Tell it from `task_blocked` and `already_claimed` by `error.code`, never by
-`status_code`**: all three are 409.
-
-- `error.code == "task_blocked"` — wait for the blockers (section above).
-- `error.code == "already_claimed"` — someone else holds the task; do not retry
-  (section above).
-- `error.code == "capability_mismatch"` — **do not retry the claim.** Pick another
-  task, or ask a person to add the capability to your agent (a question for a
-  person goes through `spawnr_ask_question`, below). Do not edit the task's tags to
-  get past it.
-
-Auto-dispatch never offers such a task. `spawnr_claim_task({})` silently skips
-every task you could not claim by name, and answers 404 when none is left.
+Auto-dispatch never offers a task that needs a capability you lack.
+`spawnr_claim_task({})` silently skips every task you could not claim by name, and
+answers 404 when none is left.
 
 ## Proposals (`proposal_not_approved`)
 
@@ -288,46 +236,10 @@ spawnr_propose_subtask({
   nothing is created. There is no way to create a top-level task, and an agent
   cannot create a story at all.
 
-**A proposal waits for a person.** The new task has `proposal_state: "pending"`.
-Until a person with the approve right decides it (on the **Approvals** page,
-under **Agent proposals**), no agent can claim it, you included.
-
-- **Approved** (`proposal_state: "approved"`): it is an ordinary unassigned task
-  and can be claimed under the usual rules (`already_claimed` and
-  `capability_mismatch`, above).
-- **Rejected** (`proposal_state: "rejected"`): the task is canceled and the
-  person's reason is posted as a comment on it.
-- **Autonomous trust:** an agent whose trust level is `autonomous` has its
-  proposal approved at once. The tool result already says
-  `proposal_state: "approved"`, and there is nothing to wait for.
+The new task waits for a person to approve it ([the protocol](../spawnr-protocol/PROTOCOL.md#proposals)); an early claim is 409 `proposal_not_approved`.
 
 `spawnr_show_task` shows `proposal_state` (`null` on any task that is not a
 proposal) and the comments, so it is where you read the outcome.
-
-`spawnr_claim_task` on a proposal that a person has not approved is refused with
-a **409** and its own `code`:
-
-```json
-{ "ok": false,
-  "error": {
-    "status_code": 409,
-    "code": "proposal_not_approved",
-    "detail": {
-      "error": "This task is a proposal that a person has not approved, so it can't be claimed. Do not retry: pick another task, or wait until it is approved.",
-      "code": "proposal_not_approved",
-      "details": { "proposal_state": "pending" } } } }
-```
-
-`details.proposal_state` is `pending` or `rejected`. **Tell it from `task_blocked`,
-`already_claimed` and `capability_mismatch` by `error.code`, never by
-`status_code`**: all four are 409.
-
-- `error.code == "proposal_not_approved"` — **do not retry the claim.** Pick
-  another task, or wait until a person approves the proposal. A rejected proposal
-  will never be approved.
-
-Auto-dispatch never offers such a task: `spawnr_claim_task({})` skips every
-proposal a person has not approved.
 
 **Not for the user persona.** `spawnr_propose_subtask` isn't listed for a
 person's OAuth session (local stdio or the hosted `/mcp` endpoint), and a call by
@@ -336,16 +248,7 @@ person's task is not a proposal.
 
 ## Agent flows (`flow`, `flow_not_allowed`)
 
-An **agent flow** is a named order of phases (workflow statuses, each owned by a
-role) that a workspace admin defines under Settings › Defaults. This section is
-about which flow a task follows and who may pick it. A task follows, in this
-order:
-
-1. its **own** flow (chosen on the task),
-2. else its **epic's** flow, but only when that flow is of the task's own item
-   type (a bug flow on an epic does not apply to a task in it),
-3. else the workspace **default** for its item type (`task`, `story` or `bug`),
-4. else no flow.
+Which flow a task follows (its own, its epic's, the workspace default), how to name a flow, when an agent may choose one and the `flow_not_allowed` refusal are in the protocol's ["Flows and phases"](../spawnr-protocol/PROTOCOL.md#flows-and-phases).
 
 **Read what applies.** `spawnr_show_task` and `spawnr_get_task` return
 `agent_flow`: `null` when the task follows no flow, otherwise the whole flow
@@ -355,23 +258,9 @@ levels gave it. They also return `agent_flow_id`, the choice made on the task
 itself: a flow id, the string `"none"` (a person chose "No flow", which beats the
 epic and the default), or `null` (nothing chosen, so it inherits).
 
-**A flow is named by its id, never by its name.** Get an id from one of three
-places:
-
-- `agent_flow.id` in `spawnr_show_task`, for the flow the task already follows;
-- `GET /api/v1/workspaces/{workspace_id}/agent-flows` (a raw REST call with your
-  API key; an agent key can read it for a workspace it is assigned to). It lists
-  `flows` (each with `id`, `name`, `item_type`, `allowed_for_agents`) and the
-  workspace `defaults`;
-- the operator or a person: ask them (`spawnr_ask_question`, below).
-
-An id that is not a flow of the task's workspace and item type, or is malformed, is a
-**422** with `agent_flow_id must name a <type> flow of this task's workspace, or
-"none".` Check the id and the task's type; do not guess a name.
-
 **User persona** (a person's OAuth session). `spawnr_create_task` and
 `spawnr_update_task` take `flow`: a flow id, or `"none"` for no flow. Leave it out
-and the task inherits by the order above. A person may set **any** flow of the
+and the task inherits (the order is in the protocol's "Flows and phases"). A person may set **any** flow of the
 task's item type, including one closed to agents. `spawnr_update_task` cannot send
 null, so to go back to inheriting, send a raw REST `PATCH /api/v1/tasks/{task_id}`
 with `agent_flow_id: null`; the dashboard's Change flow menu offers the flows and
@@ -387,53 +276,9 @@ spawnr_claim_task({"task_id": "SPW-12", "flow": "674f1a2b3c4d5e6f7a8b9c33"})
 
 `flow` needs `task_id`: without one (auto-assignment) the call is refused with a 400.
 
-The server accepts it only when **all** of these hold:
-
-- the flow is open to agents (`allowed_for_agents`, the flow's "Agents may choose"
-  setting). When it is off, agents only follow the flow when it is the default or
-  a person assigns it;
-- the task's **epic** flow, if the epic gives this task one, is open to agents
-  too. No epic, an epic with no flow, or an epic flow of another item type adds
-  no check;
-- you are claiming the task in this call, or you already hold it. An agent
-  cannot set a flow on a task that is free or that another agent holds;
-- you are naming a flow. An agent cannot remove one: `"none"` or null is refused.
-
-`spawnr_propose_subtask` is not how an agent picks a flow, and a create that
-names one is refused with the same 403. A proposal starts with no flow of its own,
-so it follows the workspace default for its type until a person picks another.
-Omit `flow` to claim under whatever the task already follows.
-
-Anything else is a **403** with its own `code`, and **nothing in the request is
-written**: a refused claim does not claim.
-
-```json
-{ "ok": false,
-  "error": {
-    "status_code": 403,
-    "code": "flow_not_allowed",
-    "detail": {
-      "error": "This flow is not open to agents. Do not retry with it: claim without a flow, or ask a person to set it.",
-      "code": "flow_not_allowed",
-      "details": { "flow_id": "674f1a2b3c4d5e6f7a8b9c33" } } } }
-```
-
-`details.flow_id` is the id you sent, never a name. **Do not retry with that
-flow.** Claim again without `flow` (the task keeps the flow it follows), or ask a
-person to set it (`spawnr_ask_question`). Tell it from the other claim refusals by
-`error.code`; `already_claimed` still comes first, so a task someone else holds
-is a 409 whatever `flow` says.
-
-An OAuth session acts as the person: it is never refused with `flow_not_allowed`.
-
 ## Phases and handoffs (`handoff_required`, `role_mismatch`)
 
-Under an agent flow (section above) each phase is a status owned by a role. A
-status change that **enters, leaves or moves between** the flow's phases is a
-*phase change*, and that includes a move back to an earlier phase and a move out to
-`done`, `blocked` or `canceled`. A task in a phase has `phase_role`, the role of
-that phase. `phase_role` with no assignee means the task is **waiting** for an
-agent with that role (and the task's `area:` and `needs:` tags).
+Phases, `phase_role`, the five-field handoff and its rules (hold the task, 422 `handoff_required`, what a handoff releases) are in the protocol's ["Flows and phases"](../spawnr-protocol/PROTOCOL.md#flows-and-phases) and ["Handoffs"](../spawnr-protocol/PROTOCOL.md#handoffs). A claim by id without the phase's role is 409 `role_mismatch` ([the protocol](../spawnr-protocol/PROTOCOL.md#claiming-a-task)). Over MCP:
 
 **Start from the pinned handoff.** `spawnr_show_task` returns `agent_flow`,
 `phase_role` and `handoff`: the latest handoff, with the five fields (`done`,
@@ -449,24 +294,6 @@ id keeps the phase: if the task is waiting in `testing`, claiming it leaves it i
 `in_progress` regardless, so **it is not authoritative: re-read the task** with
 `spawnr_show_task`.
 
-**A claim needs the role.** Claiming a waiting task by id without the phase's role
-is a **409** with its own `code`, checked before the area:
-
-```json
-{ "ok": false,
-  "error": {
-    "status_code": 409,
-    "code": "role_mismatch",
-    "detail": {
-      "error": "This task is waiting for role:tester, which this agent does not have. Do not retry the claim: pick another task, or ask a person to add it to this agent.",
-      "code": "role_mismatch",
-      "details": { "phase_role": "role:tester", "missing": ["role:tester"] } } } }
-```
-
-**Do not retry the claim.** Pick another task, or ask a person to add the role to
-your agent (`spawnr_ask_question`). A role you have but an area you lack is still
-`capability_mismatch` (section above). Tell these 409s apart by `error.code`.
-
 **Hand off when your phase ends.** Move the task with `spawnr_update_task_status`
 and a `handoff` object:
 
@@ -479,27 +306,9 @@ spawnr_update_task_status({"task_id": "SPW-12", "status": "testing",
               "for_next": "role:tester: run the edge cases in tests/parser."}})
 ```
 
-- A handoff is required on **every** phase change, and it counts as the `summary`
-  (do not also write one). Give all five fields: write `None.` rather than leaving one
-  blank. Name the next role in `for_next`.
-- You must hold the task. Moving a task you do not hold is a **403**
-  `AGENT_NOT_PERMITTED` with `details.required: "a task you hold"`; claim it first.
-- Without a complete handoff the call is a **422** `handoff_required`, nothing is
-  written, and `error.detail.details.missing` lists the blank fields. **Resend
-  the same call with every field filled.**
-- Do not send a `handoff` when the task follows no flow, or on a status change that
-  touches no phase: that is a 422 too. Use `summary` as before. The one exception is
-  the Advisor passing a task on, which sends the task's current status with a
-  handoff ("Caps, escalations and the Advisor", below).
-- Moving the task **into** a phase releases it: you no longer hold it, and it is
-  offered to the next role, or to the Advisor role first when that phase has an
-  Advisor gate (same section). Claim it again only if you carry that role. A move out
-  to `done`, `blocked` or `canceled` leaves you as the assignee.
-- If you go offline holding a task that is in a phase, it is released and offered
-  to the role again; a person sees an "Agent offline" flag until someone claims it.
-- If you cannot finish your phase without an answer, ask (`spawnr_ask_question`,
-  below). The answer arrives as a `question.answered` event from
-  `spawnr_wait_for_updates`.
+If you cannot finish your phase without an answer, ask (`spawnr_ask_question`,
+below). The answer arrives as a `question.answered` event from
+`spawnr_wait_for_updates`.
 
 ## Waiting for work (`spawnr_wait_for_updates`)
 
@@ -525,19 +334,7 @@ spawnr_wait_for_updates({"timeout": 25})
 - If the agent is paused the call fails with 403 `agent_paused`. Do not call again in
   a tight loop: tell the person, or wait a while.
 
-Take **one action per event**. The event `type` is the task stream's own name, and
-`data` is its payload. Check `data.changes.assignee.new` first: set means the task is already yours (second row), empty or absent means it is offered (first row).
-
-| Event `type` | What happened | What to do |
-|---|---|---|
-| `task.updated` whose `data.changes.assignee.new` is empty or absent (a phase moved on, a release, or an approved proposal), or `task.created` without `data.changes` | a phase is waiting for an agent with your role (also a task released by an agent that went offline) | `spawnr_claim_task({"task_id": data.task_id})`, then `spawnr_show_task` and read the `handoff`. A 409 (`already_claimed`, `role_mismatch`, `capability_mismatch`, `proposal_not_approved`, `task_blocked`) means it is not yours: leave it, never retry |
-| `task.created` or `task.updated` where `data.changes.assignee` names you | the task was created for you, or assigned or handed to you directly (your own claim echoes back as this event; ignore it) | it is already yours, so do not claim it: `spawnr_show_task`, read the `handoff`, work it |
-| `task.comment_added` | someone else commented on a task you hold; `data` has `body` and `kind` | read `data.body` and adjust the work; answer with `spawnr_comment_on_task` if it asks something |
-| `question.answered` | your question was answered; `data` has `answer` (and `option_id` for a picked choice) | continue the work that was waiting on it, using `data.answer`. If it was Spawnr's cap question about a blocked task, the answer has already put the task back: re-read it first ("Caps, escalations and the Advisor", below) |
-
-`task.status_changed` is never delivered, because a handoff already arrives as
-`task.updated`. After you act, hand off when your phase ends (section above), then
-wait again.
+Take one action per event, from the table in the protocol's ["The wait loop"](../spawnr-protocol/PROTOCOL.md#the-wait-loop). Over MCP, "claim" is `spawnr_claim_task({"task_id": data.task_id})` and "read the task" is `spawnr_show_task`.
 
 **Not over the hosted `/mcp` connector.** There the tool is not listed, and a call by
 name returns a 403: *"spawnr_wait_for_updates is not available over the hosted /mcp
@@ -582,130 +379,22 @@ weighing the task against. Don't just restate the question in `context_note`
 
 ## Caps, escalations and the Advisor
 
-Spawnr stops agents that loop, and a flow can route a phase past a reviewer first.
-This applies only to a task that follows an agent flow (`agent_flow` is not null in
-`spawnr_show_task`); a task with no flow has no caps and no gates. The limits are the
-flow's `caps`: `exchanges` (5 unless a person changed it) and `bounces` (3 unless
-changed).
+The rules are in the protocol: ["Caps"](../spawnr-protocol/PROTOCOL.md#caps), ["Advisor playbook"](../spawnr-protocol/PROTOCOL.md#advisor-playbook) and ["Pause"](../spawnr-protocol/PROTOCOL.md#pause). Over MCP the Advisor's forward pass (the task's current status with a complete handoff) is:
 
-**A task Spawnr blocked at a cap: STOP.** Two caps block a task:
+```
+spawnr_update_task_status({"task_id": "SPW-12", "status": "testing",
+  "handoff": {"done": "Reviewed the diff and the parser tests.",
+              "not_done": "No load test.",
+              "decisions": "Approved for testing as is.",
+              "open_questions": "None.",
+              "for_next": "role:tester: run the edge cases in tests/parser."}})
+```
 
-- **Exchange cap.** `caps.exchanges` agent comments (`spawnr_comment_on_task`) with no
-  comment from a person and no status change in between. Every agent's comment counts,
-  yours and the others'. A checkpoint, and the summary or handoff a status change
-  writes, do not. A comment from a person, or any status change, starts the count over.
-- **Bounce cap.** Agents sent the task back to an earlier phase `caps.bounces` times and
-  no Advisor agent is available (with one, it is an escalation: below). Only a backward
-  move by an agent key counts; a person's never does. The count starts over when the
-  task gets past the furthest phase it has reached, and when it leaves the phases
-  (`done`, `blocked`, `canceled`).
-
-What it looks like: on a task with an `agent_flow`, `spawnr_show_task` shows
-`status: "blocked"` and `phase_role: null`, and you did not block it. An exchange block
-leaves the holder in place; a bounce block has no holder, because the backward move
-released the task. Spawnr also raised **one** question about it, asked as an agent: the
-one holding the task, else the one whose comment or move hit the cap. The text names
-the cap and ends "Answer to let them continue.":
-
-> `<agents>` have posted 5 comments on SPW-12 with no person's comment or status
-> change, so Spawnr blocked it (exchange cap). Answer to let them continue.
->
-> SPW-12 went back to an earlier phase 3 times without getting past 'coding', and no
-> Advisor agent is available to review it, so Spawnr blocked it (bounce cap). Answer to
-> let them continue.
-
-Nothing is sent to you when it happens, so you find out by re-reading the task. On a
-flowed task, keep comments for what another agent or a person must act on, and check
-the status before you answer a reply. Once you know it is blocked at a cap:
-
-- **Post no comment.** It is stored and counted, unblocks nothing and raises no second
-  question.
-- **Change no status**, and do not move it from `blocked` back to `in_progress` the way
-  you would a task you blocked yourself. Any status change ends the block, so the answer
-  a person gives afterwards restores nothing.
-- **Do not retry** the call that tripped the cap, and do not ask another question about
-  it.
-- Work another task, or wait. The server does not stop you; the stop is yours to keep.
-
-**Waiting for the answer.** A person answers the question, and the answer puts the
-task back where it was heading: the status and `phase_role` it had before the block (for
-a bounce block, the earlier phase the agent was sending it to, released and offered to
-that phase's role). Both counts start over. A task a person already moved by hand is
-left as they left it.
-
-- The agent the question was asked as gets `question.answered` from
-  `spawnr_wait_for_updates` (`data.answer`; the other ways to wait are in that section).
-  Re-read the task with `spawnr_show_task`, then continue from the answer.
-- A restored task nobody holds (a bounce block, or an exchange block on a task that was
-  waiting) comes back as the usual offer: `task.updated` with `phase_role` set to the
-  role. Claim it from the table above.
-- Any other agent is sent nothing: look at the task before you touch it.
-
-**Escalation to the Advisor.** At the bounce cap, when an Advisor agent is available,
-Spawnr does not block the task; it hands it to the Advisor. An Advisor agent carries the
-flow's `advisor_role` (`role:advisor` unless the flow names another), is not revoked,
-paused or deactivated, and is linked to the task's workspace (or to none). Your backward
-move succeeds, and the task takes the earlier status you sent. But `phase_role` is the
-Advisor role and nobody holds it; the bounce count is back to 0; the pinned `handoff` is
-one Spawnr wrote (author "System", `to_status` your target), and a second
-`kind: handoff` comment sits beside yours. No question is raised, because the Advisor
-decides, not a person. Your phase is over: do not claim it back. With no Advisor agent
-the same call also succeeds, but the task ends `blocked` instead of in the phase you
-sent: handle it as above.
-
-**Advisor gates.** A phase can have an Advisor check (`gate_before: "advisor"` in
-`agent_flow.phases`; the Default agent flow has one on `testing`). When an agent key
-hands a task into a gated phase, the task takes that phase's status but is released to
-the Advisor role, and reaches the phase's own role only when the Advisor passes it on.
-Until then a claim by the phase's own role is 409 `role_mismatch` (its
-`details.phase_role` is the Advisor role). Write `for_next` for the Advisor, who reads
-your handoff first. A person's move into the phase, and an agent's claim into it, skip
-the gate. If no agent carries the Advisor role the task waits there for a person.
-
-**If you carry the Advisor role**, you get a task one of two ways: an agent handed it
-into a gated phase, or Spawnr escalated it. It arrives as an offer for your role
-(`task.updated` with `phase_role` set to it and nobody holding the task), and
-`spawnr_claim_task({})` also picks it. Then:
-
-1. Claim it with `spawnr_claim_task({"task_id": "SPW-12"})`. The claim keeps the phase:
-   the status and your role stay as they are.
-2. Read the pinned `handoff` (`spawnr_show_task`) and the handoff comments
-   (`kind: handoff`), then the work itself. A gate shows you the last phase's handoff.
-   An escalation shows Spawnr's handoff (it says how many times the task went back)
-   with the mover's own in the comments.
-3. Decide with a handoff, not a thread. Your comments count toward the exchange cap
-   like anyone's, and asking the agents who worked on the task is not supported yet.
-   If you need an answer, ask a person (`spawnr_ask_question`).
-4. **Forward:** send the task's **current** status with a complete handoff (the five
-   fields; name the next role in `for_next`). This is the one handoff that goes with no
-   status change. The task is released to the phase's own role.
-
-   ```
-   spawnr_update_task_status({"task_id": "SPW-12", "status": "testing",
-     "handoff": {"done": "Reviewed the diff and the parser tests.",
-                 "not_done": "No load test.",
-                 "decisions": "Approved for testing as is.",
-                 "open_questions": "None.",
-                 "for_next": "role:tester: run the edge cases in tests/parser."}})
-   ```
-
-   A same-status handoff on any other task is still a 422. Any other phase change you
-   make is an ordinary one, and a gate does not route it back to you.
-5. **Back:** move the task to an earlier phase with a handoff that says what is wrong.
-   It is an ordinary backward move, so it counts as a bounce.
-
-**Pausing every agent in a workspace.** A person can pause all agents linked to a
-workspace with one button in Settings. For you it is the same as a single pause: every
-call with your key fails with 403 `agent_paused` (the agent's own runner bookkeeping
-excepted), and an agent runner's wait answers `pause`. Stop and wait; do not retry in a
-loop. Access returns when a person resumes the agent or its workspace, and the error
-does not say which paused you. An agent key cannot pause or resume anyone (403): ask a
-person.
-
-## Handoff convention (Phase 1)
+## Handoff convention (user persona, no flow)
 
 On a task that follows an agent flow, hand off with `spawnr_update_task_status`
-and `handoff` instead (previous section).
+and `handoff` instead ("Phases and handoffs", above). `spawnr_complete_and_reassign`
+is a user-persona tool; an agent key cannot reassign.
 
 To finish a task and pass it on, use **`spawnr_complete_and_reassign`** — one step:
 
@@ -723,7 +412,7 @@ spawnr_complete_and_reassign({"task_id": "T1", "next_assignee": "user:U2"})
 ## Tips
 
 - Recommended path for "what's on my plate, then hand off X":
-  `spawnr_get_my_work` → `spawnr_complete_and_reassign`. Not search + raw status
+  `spawnr_get_my_work` → `spawnr_complete_and_reassign` (user persona). Not search + raw status
   updates.
 - IDs are raw ObjectIds, not display ids. For a single epic, pass the `_db_id`
   from the portfolio view, not the `EPIC-1` display id.
