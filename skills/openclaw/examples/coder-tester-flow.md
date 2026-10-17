@@ -12,7 +12,7 @@ A handler gets the task detail, including the pinned `handoff` from the last pha
 
 ```python
 def handle(task: dict) -> dict:
-    # task["phase_role"] == "role:coder"; task.get("handoff") is empty in the first phase
+    # task["phase_role"] == "role:coder"; task.get("handoff") is None in the first phase
     # ... write the code ...
     return {"handoff": {
         "done": "Parser written, 14 tests pass.",

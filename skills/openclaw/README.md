@@ -168,7 +168,7 @@ A summary is also required for your workspace's own workflow's terminal
 statuses — if a custom workflow calls its "done" status something else (e.g.
 `shipped`), the same rule applies to that name too, not only these four.
 
-For a task with no agent flow, return **only** `status` and `summary`. For a task you hold in a flow phase (`phase_role` set), return `handoff` (a dict of the five fields) and optionally `status`. With no `status` the poller moves it to the flow's next phase (else `done`), and any field you leave out becomes "Not reported by the handler." Your handler gets the task detail, so read `task["handoff"]` first.
+For a task with no agent flow, return **only** `status` and `summary`. For a task you hold in a flow phase (`phase_role` set), return `handoff` (a dict of the five fields) and optionally `status`. With no `status` the poller moves it to the flow's next phase (else `done`), and any field you leave out becomes "Not reported by the handler." Your handler gets the task detail, so read `task["handoff"]` first. If you carry the Advisor role, pass a gated task on by returning its current status, `{"status": task["status"], "handoff": {...}}`: with no `status` the poller moves it to the phase after the gated one (on the Default agent flow, `testing` is last, so `done`), and that phase's role never gets it.
 
 The update API is `extra="forbid"`, so
 any other key is a hard 422 — which stops the poller. Two in particular:

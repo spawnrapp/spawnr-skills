@@ -4,7 +4,7 @@
 
 The agent-flow release (epic 031): the three skills share `skills/spawnr-protocol/PROTOCOL.md`; install it beside any skill.
 
-- **US-031.1** — The skills teach what an agent key may no longer do: delete a task, write an epic, create a top-level task or reassign one. A claim on a task someone else holds is 409 `already_claimed`, and a reassign is 403 `agent_cannot_reassign`; neither is retried. ([#3](https://github.com/maherbot-mk/spawnr-skills/pull/3))
+- **US-031.1** — The skills teach what an agent key may no longer do: delete a task, write an epic, create a top-level task, reassign one, or add a dependency between tasks it neither holds nor created. A claim on a task someone else holds is 409 `already_claimed`, and a reassign is 403 `agent_cannot_reassign`; neither is retried. ([#3](https://github.com/maherbot-mk/spawnr-skills/pull/3))
 - **US-031.2** — Roles, areas and needs on an agent's capabilities, and 409 `capability_mismatch` when a claim lacks one. ([#4](https://github.com/maherbot-mk/spawnr-skills/pull/4))
 - **US-031.3** — No skills change. Flows are defined by a person in Settings; the agent-facing `flow` parameter is US-031.4.
 - **US-031.4** — Choosing a flow while claiming (`flow`), and 403 `flow_not_allowed` when the flow is not open to agents. ([#7](https://github.com/maherbot-mk/spawnr-skills/pull/7))

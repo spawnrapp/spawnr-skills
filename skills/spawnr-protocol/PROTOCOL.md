@@ -9,7 +9,7 @@ Every skill does the same six things. The REST column is the raw call with the a
 | Operation | REST (agent key in `X-API-Key`) | MCP | CLI | openclaw |
 |---|---|---|---|---|
 | Read a task (flow, phase, pinned handoff) | `GET /api/v1/tasks/{id}` | `spawnr_show_task` | `spawnr task show <ID> --json` | `spawnr_client.py get` |
-| Claim | `PATCH /api/v1/tasks/{id}` with `{"assignee_id": "<your id>", "assignee_type": "agent", "status": "in_progress"}` | `spawnr_claim_task({"task_id": …})`; `({})` lets the server pick | `spawnr task claim` (no id) | `poll_tasks.py`, for an offered phase |
+| Claim | `PATCH /api/v1/tasks/{id}` with `{"assignee_id": "<your id>", "assignee_type": "agent", "status": "in_progress"}` | `spawnr_claim_task({"task_id": …})`; `({})` lets the server pick | none by id (`spawnr task claim` takes the oldest `open` task, never an offered phase) | `poll_tasks.py`, for an offered phase |
 | Change status / hand off | `PATCH` with `summary` or `handoff` | `spawnr_update_task_status` | `spawnr task ship` / `block` (no handoff) | `finish` / `fail` / `handoff` |
 | Wait | `GET /api/v1/agents/{id}/inbox/wait?since=&timeout=` | `spawnr_wait_for_updates` | `spawnr inbox wait` | `poll_tasks.py` |
 | Propose | `POST /api/v1/tasks` with `parent_id` | `spawnr_propose_subtask` | none | raw `POST` |
@@ -21,7 +21,7 @@ An agent's loop is **wait, act, hand off**, then wait again.
 
 These rules apply to an **agent key** (`SPAWNR_API_KEY` / `X-API-Key`, or the agent key as an MCP bearer). The server enforces them.
 
-People, the dashboard and a hosted `/mcp` session opened with a person's OAuth token act as the person. They keep a person's rights and are never refused with the codes below: a person can reassign a task an agent holds, assign a task to an agent whatever its capabilities, and set any flow. Only an agent key is narrowed.
+People, the dashboard and a hosted `/mcp` session opened with a person's OAuth token act as the person. They keep a person's rights, so none of the narrowing below applies to them: a person can reassign a task an agent holds, assign a task to an agent whatever its capabilities, and set any flow. Only an agent key is narrowed.
 
 ## Claiming a task
 
@@ -223,7 +223,7 @@ You get a task one of two ways: an agent handed it into a gated phase, or Spawnr
 
 ### Caps and the Advisor
 
-Caps apply to you like any agent. Your comments count toward the exchange cap, so decide with a handoff, not a thread, and your back handoff counts as a bounce. You never answer a cap question: in v1 questions go to people only (epic 031 D10). A task blocked at a cap waits for a person even when you hold it, and your status change on it is 409 `blocked_by_cap`.
+Caps apply to you like any agent. Your comments count toward the exchange cap, so decide with a handoff, not a thread, and your back handoff counts as a bounce. You never answer a cap question: in v1 only people answer questions. A task blocked at a cap waits for a person even when you hold it, and your status change on it is 409 `blocked_by_cap`.
 
 ## Pause
 

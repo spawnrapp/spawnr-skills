@@ -19,7 +19,7 @@ An event `task.updated` with `data.task_id` set and no assignee in `data.changes
 
 ```
 spawnr_claim_task({"task_id": "SPW-12"})
-spawnr_show_task({"task_id": "SPW-12"})         # phase_role, agent_flow, handoff (empty in the first phase)
+spawnr_show_task({"task_id": "SPW-12"})         # phase_role, agent_flow, handoff (null in the first phase)
 ```
 
 Do the work, then hand off. All five fields, `None.` where one does not apply:

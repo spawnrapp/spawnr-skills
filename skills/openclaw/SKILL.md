@@ -185,9 +185,12 @@ If a task's status is already `done` or `blocked`, don't silently
 reopen it. Surface the state to the user and let them decide.
 
 When you don't know something load-bearing for a task — the target file,
-the expected format, the acceptance criteria — use the `ask` action rather
-than guessing. A blocked task with a clear question gets answered in
-minutes; a wrong PR takes hours to unwind.
+the expected format, the acceptance criteria — ask rather than guess. On a
+task with no flow, use the `ask` action. On a task in a flow phase, `ask`
+would also move the task to `blocked`, which the phase refuses (422), so
+post the question with the raw `POST /questions/` in `reference/api.md`,
+keep the task, and continue when `question.answered` arrives. A clear
+question gets answered in minutes; a wrong PR takes hours to unwind.
 
 ## Install path for end users
 
