@@ -3,6 +3,8 @@
 This example shows a Node.js-based agent using the Spawnr CLI
 (`spawnr` command) to complete a full task lifecycle.
 
+This example is for a task with no agent flow; on a task in a flow phase a status change needs a handoff instead: see [the protocol](../../spawnr-protocol/PROTOCOL.md#handoffs).
+
 ## Prerequisites
 
 ```bash

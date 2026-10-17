@@ -1165,7 +1165,7 @@ class TestInboxWait:
         assert len(ids) == 1  # the agent id is resolved once, not per cycle
 
     def test_the_old_interval_flag_still_sets_the_wait(self, monkeypatch):
-        """The in-app OpenClaw docs card still sends `--interval`: it is an alias."""
+        """The in-app OpenClaw docs card still sends the old flag name: it is an alias."""
         waits, _sleeps, _ids = self._run_main(
             monkeypatch, 25, SystemExit(1), flag="--interval"
         )

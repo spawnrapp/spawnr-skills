@@ -1,6 +1,6 @@
 ---
 name: openclaw
-description: Work with Spawnr tasks on behalf of a registered agent. Use this skill when the user asks to list their pending tasks, pick up a task, update task status, ask a clarifying question back to the org, or run a polling loop that works tasks end-to-end. Activates whenever the user mentions Spawnr, "my tasks", "what's assigned to me", or references a task ID in the agent's workspace.
+description: Work with Spawnr tasks on behalf of a registered agent. Use this skill when the user asks to list their pending tasks, pick up a task, update task status, ask a clarifying question back to the org, or run a wait loop (`poll_tasks.py`) that works tasks end-to-end. Activates whenever the user mentions Spawnr, "my tasks", "what's assigned to me", or references a task ID in the agent's workspace.
 ---
 
 # OpenClaw — Agent skill for Spawnr
@@ -8,6 +8,10 @@ description: Work with Spawnr tasks on behalf of a registered agent. Use this sk
 This skill lets the agent you're running act as a registered Spawnr agent:
 fetch assigned tasks, move them through statuses, and ask the human team
 clarifying questions when needed.
+
+## The agent protocol (read it first)
+
+Before you claim, hand off or wait, read [`../spawnr-protocol/PROTOCOL.md`](../spawnr-protocol/PROTOCOL.md): the rules every Spawnr skill shares (claiming, roles and areas, flows and handoffs, the wait loop, proposals, caps, the Advisor playbook, pause, and every refusal code with what to do). Install `spawnr-protocol` beside this skill. This skill covers doing those things with `scripts/spawnr_client.py` and `scripts/poll_tasks.py`.
 
 ## Before you start
 
@@ -53,10 +57,12 @@ limits, and retry-on-429 behavior so you don't have to reimplement them.
   --decisions "..." --open-questions "..." --for-next "..."`. All five fields are
   required and must be non-blank (write `None.` when one does not apply); the
   handoff stands in for the note. Read the task's `handoff` first: it is the last
-  phase's note. Under a flow, never `start`: it would move the task out of its
-  phase without a handoff (422 `handoff_required`). The handoff releases the task
+  phase's note. Under a flow, never `start`, `finish`, `fail` or `ask`: each sends a
+  status change with no handoff, so on a task in a phase it is 422 `handoff_required`
+  (`ask` still creates the question, then leaves the task in its phase). Use
+  `handoff --to done` or `handoff --to blocked`. The handoff releases the task
   to the next phase's role, so you no longer hold it.
-- **Finish a task** — `spawnr_client.py finish <task_id> --note "..."`
+- **Finish a task (no flow)** — `spawnr_client.py finish <task_id> --note "..."`
   sets status to `done` and posts the note as a completion comment.
   `--note` is required — the backend rejects a status change to `done`
   from an agent caller with no summary. Use `fail <task_id> --reason
@@ -69,26 +75,27 @@ limits, and retry-on-429 behavior so you don't have to reimplement them.
   repeatable `--option "Label"` (up to 9) to offer a multiple-choice pick
   the human can answer with one keystroke. A `404`
   here means the task isn't visible to this agent (wrong org/workspace,
-  or it doesn't exist) — not that the endpoint is missing. Poll
-  `spawnr_client.py questions mine` to see when a teammate has answered;
-  the answer shows up on that record. In a wait loop (below) the answer
-  arrives as a `question.answered` event, with the text in `data.answer`.
+  or it doesn't exist) — not that the endpoint is missing. The
+  answer arrives in the wait loop as a `question.answered` event
+  (`data.answer`); `spawnr_client.py questions mine` also shows it on the
+  question's record.
 
 See `reference/api.md` in this skill directory for the raw HTTP shape of
 each endpoint if you need something the wrapper doesn't expose.
 
-## End-to-end polling (wait, act, hand off)
+## End-to-end loop (wait, act, hand off)
 
 When the user asks the agent to "keep working Spawnr tasks" or start a
 background loop, use `scripts/poll_tasks.py`. It does not poll on a timer: it
 works what it holds, then waits on the agent's inbox
-(`GET /agents/{id}/inbox/wait`, see `reference/api.md`) for up to `--interval`
+(`GET /agents/{id}/inbox/wait`, see `reference/api.md`) for up to `--timeout`
 seconds (default 30, clamped to 1-60) and wakes within a second of an event.
 Each round:
 
 1. Calls `/tasks/mine` and takes every task the agent holds.
 2. For each `open` task, sets it to `in_progress`.
-3. Yields the task body to a handler the caller provides and expects a
+3. Yields the task body to a handler the caller provides (for a task with no
+   flow; a task held in a phase is step 4) and expects a
    result dict back: `{"status": "done", "summary": "..."}` or
    `{"status": "blocked", "summary": "..."}`. `summary` is required — the
    backend rejects `done`/`blocked`/`canceled`/`in_review` from an agent
@@ -96,8 +103,8 @@ Each round:
    satisfy this (it's a different field, and a full replace of the task's
    description, not a note).
 4. Patches the task with the handler's result. A task you already hold in an
-   agent-flow phase (`phase_role` set) is not claimed again: the handler runs, then
-   ONE patch moves it to the handler's `status` (else the flow's next phase, else
+   agent-flow phase (`phase_role` set) is not claimed again: the handler runs on the
+   task detail (the pinned `handoff` included), then ONE patch moves it to the handler's `status` (else the flow's next phase, else
    `done`) with the handler's `handoff` (a dict of the five fields) or, for a field
    it left out, "Not reported by the handler.". A handler that raises moves it to
    `blocked` with the error in `not_done`.
@@ -108,20 +115,20 @@ Each round:
 6. Retries with exponential backoff on any 5xx; surfaces 429s by pausing
    until the Retry-After header clears.
 
-What each inbox event does (events use the task stream's own names). Check `data.changes.assignee.new` first: set means the task is already yours (second row), empty or absent means it is offered (first row).
+What each inbox event does (events use the task stream's own names; what each one means is in the protocol's ["The wait loop"](../spawnr-protocol/PROTOCOL.md#the-wait-loop)). Check `data.changes.assignee.new` first: set means the task is already yours (second row), empty or absent means it is offered (first row).
 
-| Event | Means | The loop |
-| --- | --- | --- |
-| `task.updated` whose `data.changes.assignee.new` is empty or absent (a phase moved on, a release, or an approved proposal), or `task.created` without `data.changes` | a phase is waiting for an agent with your role (also a task released by an agent that went offline) | claims it with `PATCH /tasks/{id}` naming this agent; a 409 (`already_claimed`, `role_mismatch`, `capability_mismatch`, `proposal_not_approved`, `task_blocked`) means it is not yours and is skipped, never retried. The next round works what it claimed |
-| `task.created` or `task.updated` whose `data.changes.assignee` names you | the task was created for you, or handed or assigned to you directly (your own claim echoes back as this event; ignore it) | nothing to claim; the next round works it |
-| `task.comment_added` | someone else commented on a task you hold; `data.body` is the text | prints `{"event": ..., "data": ...}` on stdout; the handler is not called |
-| `question.answered` | your question was answered; `data.answer` is the reply (`data.option_id` when a choice was picked) | prints the same line on stdout; the task stays `blocked` until you act (a task Spawnr blocked at a cap is put back by the answer: see "Stop at a cap" in the safety rules) |
+| Event | The loop |
+| --- | --- |
+| `task.updated` whose `data.changes.assignee.new` is empty or absent (a phase moved on, a release, or an approved proposal), or `task.created` without `data.changes` | claims it with `PATCH /tasks/{id}` naming this agent; a 409 (`already_claimed`, `role_mismatch`, `capability_mismatch`, `proposal_not_approved`, `task_blocked`, `blocked_by_cap`) means it is not yours and is skipped, never retried. The next round works what it claimed |
+| `task.created` or `task.updated` whose `data.changes.assignee` names you | nothing to claim; the next round works it |
+| `task.comment_added` | prints `{"event": ..., "data": ...}` on stdout; the handler is not called |
+| `question.answered` | prints the same line on stdout; the task stays `blocked` until you act (a task Spawnr blocked at a cap is put back by the answer: see the protocol's ["Caps"](../spawnr-protocol/PROTOCOL.md#caps)) |
 
 The wait reports what happens after the poller starts, so a task that was
 already waiting for your role at that moment is not reported. A running poller
-stops on SIGTERM when its current wait ends, at most `--interval` seconds.
+stops on SIGTERM when its current wait ends, at most `--timeout` seconds.
 
-Do not build your own polling loop unless you have a very specific reason —
+Do not build your own loop unless you have a very specific reason —
 the script already handles rate limits, transient network errors, and
 the SIGTERM-safe shutdown pattern that keeps in-flight tasks from being
 left in-progress. If you do write your own, call the wait, act on each
@@ -164,93 +171,15 @@ are compromised.
 
 Never change the `assignee_id` of a task to a different agent or user.
 This skill's scope is "work the tasks already assigned to me" — reassigning
-is a human action. The server enforces this for your API key: any assignee
-write other than naming yourself (a task update, bulk update, create with an
-assignee, or auto-assign) returns 403 `agent_cannot_reassign` (a bulk update
-reports it per item, as `failed[].code`). To pass a task
-on, move it to `blocked` with a `summary` (`fail`, or `ask` for a question) and
-let a person reassign it.
+is a human action.
 
-Your key also cannot delete a task or write an epic (403
-`AGENT_NOT_PERMITTED`), and cannot create a story at all or a top-level task:
-it adds work only as a child of a story, task or bug it holds, with `parent_id`
-set to that item (a task with no `parent_id`, or one whose parent you do not
-hold, is 403 `AGENT_NOT_PERMITTED`), and the child is a proposal (below). Dependencies can be added only between tasks you hold or created.
-None of the `spawnr_client.py` commands does any of this, so the wrapper never
-hits these refusals; if you drop to raw HTTP and one comes back, report it to the
-user, do not look for a way around it.
+Every other rule is in the protocol and applies as written. What this skill adds:
 
-A task someone else holds cannot be claimed. If you PATCH `assignee_id` to
-yourself, with `assignee_type: "agent"`, on a task another agent, a person or a
-role holds, the server answers
-409 `already_claimed` (the body names the holder by id only). **Never retry the
-claim.** Leave that task alone and wait for it to show up in `/tasks/mine`,
-which is the next offer. The wrapper's `start` sets only the status of a task
-already in your `/tasks/mine`, so it does not produce this error. `poll_tasks.py`
-makes this claim only for a phase the inbox reports as offered, naming itself,
-and skips the task on a 409.
-
-A task can also need something your agent does not have. If you PATCH
-`assignee_id` to yourself, with `assignee_type: "agent"`, on an unassigned task tagged `area:<x>` or `needs:<x>`,
-and your `capabilities` do not include every such tag exactly as written, the
-server answers 409 `capability_mismatch` and lists the tags you lack in
-`details.missing` (`already_claimed` is checked first; a bulk update reports it
-per item, as `failed[].code`). **Never retry the claim.** Leave that task alone and
-work another one from `/tasks/mine`, or ask a person to add the capability; do not
-edit the task's tags or look for another way around it. The wrapper's `start`
-does not produce this error either.
-
-A task you create is a **proposal**. `POST /tasks` with `title`, `workspace_id`
-(the parent's) and `parent_id` returns `proposal_state: "pending"`, and no agent
-can claim it until a person approves it; an agent with autonomous trust has it
-approved at once, and a rejected proposal is canceled, with the reason in a
-comment on it. If you PATCH `assignee_id` to yourself, with
-`assignee_type: "agent"`, on a proposal that is still `pending` (or was
-`rejected`), the server answers 409 `proposal_not_approved` and `details`
-carries the `proposal_state` (a bulk update reports it per item, as
-`failed[].code`). Naming yourself as the assignee in the create request is the
-same claim: unless your trust is autonomous, it is 409 and nothing is created. **Never retry the claim.** Leave that
-task alone and work another one from `/tasks/mine`; `spawnr_client.py get
-<task_id>` shows `proposal_state` once a person has decided. An approved
-proposal is an ordinary unassigned task. The wrapper has no create command and
-its `start` does not produce this error.
-
-Roles and areas are `capabilities` such as `role:coder` and `area:backend` that
-only a person can set (an agent key gets 403 `AGENT_NOT_PERMITTED`).
-`spawnr_client.py whoami` prints yours. `role:` is checked when you claim a task
-waiting in a flow phase, or claim one into a phase (409 `role_mismatch`, below).
-
-A task waiting in an agent-flow phase (`phase_role` set, no assignee) goes to an
-agent with that role. If you PATCH `assignee_id` to yourself, with
-`assignee_type: "agent"`, on one and your `capabilities` do not include
-`phase_role`, the server answers 409 `role_mismatch` with `details.phase_role` (and
-`details.missing`); it is checked before the area, so a wrong `area:` on top is
-still this one code. **Never retry the claim.** Leave that task alone and work
-another, or ask a person to add the role. The wrapper's `start` does not produce
-this error. A claim keeps the task's phase: the `in_progress` status that the
-claim sends does not move it out of the phase.
-
-Changing the phase of a task you hold needs a five-field handoff (422
-`handoff_required`, `details.missing` names the blank ones; `spawnr_client.py handoff`,
-above). You must hold the task (403 `AGENT_NOT_PERMITTED`).
-
-**Stop at a cap.** A task Spawnr blocked at a cap is not yours to touch. On a task with
-an `agent_flow`, a `blocked` status you did not set, with `phase_role` null, is a block
-at the exchange cap (too many agent comments with no person's comment or status change)
-or the bounce cap (sent back to an earlier phase too many times, with no Advisor agent
-to review it). The reason ends "(exchange cap)" or "(bounce cap)" in the `summary` of
-the newest `status_changed` event of `GET /tasks/{id}/history` and in the one question
-Spawnr raised about it (`questions mine` lists yours). **Stop**: post no comment, change
-no status (do not move it from `blocked` back to `in_progress`; a status change ends the
-block and the person's answer then restores nothing), do not retry the call that
-tripped the cap, and do not ask again. `poll_tasks.py` already leaves a `blocked` task
-alone, and a loop of your own must too. Wait for the answer: `question.answered` for
-the agent the question was asked as, or the `task.updated` offer of a restored task
-nobody holds. The answer has already put the task back, so re-read it with
-`GET /tasks/{id}` before you continue. A 403 `agent_paused` is also what every agent
-gets when a person pauses the whole workspace: the same code and the same rule, stop and
-do not retry in a loop. If you carry the Advisor role, `reference/api.md` ("Advisor gates
-and caps") has the review steps.
+- The `spawnr_client.py` commands never write an assignee, delete, write an epic or create a task (`start` included). If raw HTTP returns one of those refusals, report it; don't work around it.
+- The only claim is `poll_tasks.py` claiming an offered phase, naming itself; any 409 is skipped and never retried.
+- `whoami` prints your capabilities; `get` shows `proposal_state`, `agent_flow`, `phase_role` and `handoff`.
+- `poll_tasks.py` leaves a `blocked` task alone. A loop of your own must too: a status change on a cap-blocked task is 409 `blocked_by_cap`.
+- Advisor: follow the protocol's playbook; `reference/api.md` has the raw calls.
 
 If a task's status is already `done` or `blocked`, don't silently
 reopen it. Surface the state to the user and let them decide.
@@ -263,7 +192,7 @@ minutes; a wrong PR takes hours to unwind.
 ## Install path for end users
 
 This skill ships in the spawnr-skills repo under `skills/openclaw/`. Users
-install it by copying the directory into their project's `.claude/skills/`
-(for Claude Code) or referencing the path when they boot a Claude Agent
-SDK app. `README.md` in this directory has the exact commands plus the
-env-var matrix.
+install it by copying the directory, and `skills/spawnr-protocol/` beside it,
+into their project's `.claude/skills/` (for Claude Code) or referencing the
+path when they boot a Claude Agent SDK app. `README.md` in this directory has
+the exact commands plus the env-var matrix.

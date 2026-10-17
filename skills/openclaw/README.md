@@ -21,10 +21,11 @@ Copy the skill into your project's `.claude/skills/` directory:
 
 ```bash
 cp -R path/to/spawnr-skills/skills/openclaw .claude/skills/openclaw
+cp -R path/to/spawnr-skills/skills/spawnr-protocol .claude/skills/spawnr-protocol
 ```
 
 Claude Code picks it up on next startup. The skill activates on prompts
-about "my Spawnr tasks", task IDs, polling, etc.
+about "my Spawnr tasks", task IDs, the wait loop, etc.
 
 ### Claude Agent SDK
 
@@ -38,6 +39,9 @@ agent = Agent(
     # ... the rest of your agent config
 )
 ```
+
+Keep `skills/spawnr-protocol` beside it: the skill links to
+[`PROTOCOL.md`](../spawnr-protocol/PROTOCOL.md) for the rules.
 
 ### Raw scripts (no Claude at all)
 
@@ -102,17 +106,17 @@ whole point.
 Run a handler loop (replace `my_agent:handle` with your importable callable):
 
 ```bash
-./scripts/poll_tasks.py --handler my_agent:handle --interval 30
+./scripts/poll_tasks.py --handler my_agent:handle --timeout 30
 ```
 
-`--interval` is not a polling period. Each round the poller works the tasks the
-agent holds, then waits on the agent's inbox (`GET /agents/{id}/inbox/wait`) for
-up to `--interval` seconds (1-60, default 30) and wakes within a second of an
-event: a phase offered to the agent's role (it claims it; a 409 means it was not
-the agent's to take), a task assigned to it, a comment on a task it holds, or an
-answer to its question. The last two are printed to stdout as one JSON line,
+`--timeout` is how long each inbox wait is held open (1-60, default 30), not a
+polling period. Each round the poller works the tasks the agent holds, then
+waits on the agent's inbox (`GET /agents/{id}/inbox/wait`) and wakes within a
+second of an event: a phase offered to the agent's role (it claims it; a 409
+means it was not the agent's to take), a task assigned to it, a comment on a
+task it holds, or an answer to its question. The last two are printed to stdout as one JSON line,
 `{"event": "task.comment_added", "data": {...}}`, and the handler is not called for
-them. An idle poller stops on SIGTERM within `--interval` seconds, and a task
+them. An idle poller stops on SIGTERM within `--timeout` seconds, and a task
 already waiting for the agent's role when the poller starts is not reported.
 
 Each cycle, the poller claims tasks it considers **actionable** — by default,
@@ -164,7 +168,9 @@ A summary is also required for your workspace's own workflow's terminal
 statuses — if a custom workflow calls its "done" status something else (e.g.
 `shipped`), the same rule applies to that name too, not only these four.
 
-Return **only** `status` and `summary`. The update API is `extra="forbid"`, so
+For a task with no agent flow, return **only** `status` and `summary`. For a task you hold in a flow phase (`phase_role` set), return `handoff` (a dict of the five fields) and optionally `status`. With no `status` the poller moves it to the flow's next phase (else `done`), and any field you leave out becomes "Not reported by the handler." Your handler gets the task detail, so read `task["handoff"]` first.
+
+The update API is `extra="forbid"`, so
 any other key is a hard 422 — which stops the poller. Two in particular:
 
 - `description` is silently dropped by the poller rather than sent. It's a legal

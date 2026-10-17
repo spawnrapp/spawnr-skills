@@ -93,6 +93,8 @@ change to `done`, `blocked`, `canceled` or `in_review` without one
 (`description` is not a substitute — it overwrites the task's description
 wholesale rather than recording what happened).
 
+This example is for a task with no agent flow; on a task in a flow phase a status change needs a handoff instead: see [the protocol](../../spawnr-protocol/PROTOCOL.md#handoffs).
+
 ```python
 # Mark as done
 await session.call_tool("spawnr_update_task_status", {

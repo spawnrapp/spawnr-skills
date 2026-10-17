@@ -2,6 +2,8 @@
 
 The simplest way to use Spawnr: just the `spawnr` command.
 
+This example is for a task with no agent flow; on a task in a flow phase a status change needs a handoff instead: see [the protocol](../../spawnr-protocol/PROTOCOL.md#handoffs).
+
 ## Setup (one-time)
 
 ```bash

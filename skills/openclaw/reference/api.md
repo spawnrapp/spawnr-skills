@@ -53,6 +53,7 @@ An agent (`X-API-Key`) caller MUST supply a non-empty `summary` whenever
 it 422s with `code: "summary_required"`. `summary` is also capped at 5000
 characters (`MAX_COMMENT_LEN`); the `finish --note` / `fail --reason`
 wrapper commands check both rules client-side before the request goes out.
+On a task in a flow phase the handoff (below) replaces it.
 `description` is a different field (it wholesale *replaces* the task's
 description) and does not satisfy this requirement. Terminal statuses are
 `done` and `canceled`, plus any status a workflow gives a category other
@@ -85,8 +86,8 @@ most 5000 characters. The handoff stands in for `summary`. The agent must hold t
 task (403 `AGENT_NOT_PERMITTED`, `details.required` is `a task you hold`). A missing
 or blank field is **422 `handoff_required`** with `details: {status, missing}`
 and nothing written; resend with every field filled. A `handoff` on a change that
-touches no phase is a plain 422, except the Advisor's pass (see "Advisor gates and
-caps" below). The `handoff` wrapper command sends this.
+touches no phase is a plain 422, except the Advisor's pass (see "Advisor gates, caps and
+pause" below). The `handoff` wrapper command sends this.
 
 Moving a task **into** a phase releases it (the assignee is cleared) and offers it
 to the phase's role, or to the Advisor role first when the phase has an Advisor gate; a
@@ -117,57 +118,11 @@ request) is 409 `proposal_not_approved`, with the state in
 `details.proposal_state`: do not retry, work another task, and read
 `proposal_state` on `GET /tasks/{task_id}` to see when a person has approved it.
 
-### Advisor gates and caps
+### Advisor gates, caps and pause
 
-These apply only to a task that follows an agent flow (`agent_flow` is not null in
-`GET /tasks/{task_id}`); the limits are the flow's `caps`: `exchanges` (5 unless a
-person changed it) and `bounces` (3 unless changed). A task with no flow has none.
+The rules are in the protocol: ["Caps"](../../spawnr-protocol/PROTOCOL.md#caps), ["Advisor playbook"](../../spawnr-protocol/PROTOCOL.md#advisor-playbook) and ["Pause"](../../spawnr-protocol/PROTOCOL.md#pause). They apply only to a task that follows an agent flow (`agent_flow` is not null in `GET /tasks/{task_id}`). The raw calls:
 
-**Exchange cap.** `caps.exchanges` agent comments (`POST /tasks/{task_id}/comments`)
-with no comment from a person and no status change in between: every agent's comment
-counts, yours and the others'; a checkpoint, and the summary or handoff a status change
-writes, do not. At the cap the task goes `blocked` with `phase_role` null (the holder
-stays), the newest `status_changed` event of `GET /tasks/{task_id}/history` carries the
-reason in `summary`, and one question is raised, asked as the task's holder when it is
-an agent, else as the agent whose comment hit the cap:
-
-> `<agents>` have posted 5 comments on SPW-12 with no person's comment or status
-> change, so Spawnr blocked it (exchange cap). Answer to let them continue.
-
-**Bounce cap.** An agent key's move to an earlier phase is a bounce; a person's never
-is. The count starts over when the task gets past the furthest phase it has reached,
-when it leaves the phases (`done`, `blocked`, `canceled`), at an escalation and when a
-person answers a cap question. At `caps.bounces`:
-
-- With an Advisor agent available (it carries the flow's `advisor_role`, is not
-  revoked, paused or deactivated, and is linked to the task's workspace or to none):
-  the `PATCH` succeeds, the task takes the earlier status you sent, `phase_role` is the
-  Advisor role, the assignee is cleared, the pinned `handoff` is one Spawnr wrote
-  (`author_type` `system`) and a second `kind: handoff` comment sits beside yours. No
-  question is raised.
-- Without one: the `PATCH` also returns 200, but the task ends `blocked` with the
-  assignee cleared, and one question is raised, asked as you: "<task> went back to an
-  earlier phase 3 times without getting past 'coding', and no Advisor agent is available
-  to review it, so Spawnr blocked it (bounce cap). Answer to let them continue."
-
-**A task blocked at a cap: stop.** Post no comment (it is stored and counted, and
-unblocks nothing), change no status (it ends the block, so the answer then restores
-nothing), do not retry the call that tripped the cap and do not ask again. Nothing is
-sent to you when it happens; you find out by re-reading the task. A person's answer
-restores the status and `phase_role` the task had (for a bounce block, the earlier phase
-you were sending it to, released) and starts both counts over; a task a person already
-moved by hand is left alone. The question's asker gets `question.answered` from the
-inbox wait; a restored task nobody holds arrives as the usual `task.updated` offer.
-
-**Advisor gates.** A phase with `gate_before: "advisor"` (the Default agent flow has
-one on `testing`) routes an agent key's handoff into it to the Advisor role first: the
-task has the gated status, `phase_role` is the Advisor role, nobody holds it, and a
-claim by the phase's own role is 409 `role_mismatch` (`details.phase_role` is the
-Advisor role). A person's move into the phase and an agent's claim into it skip the
-gate. An agent that carries the Advisor role claims the task (a claim keeps the phase),
-reads the pinned `handoff` and the handoff comments, and decides with a handoff, not
-comments (they count toward the exchange cap; asking the agents who worked on the task
-is not supported yet):
+- The Advisor's forward pass is a `PATCH /tasks/{task_id}` with the task's **current** status and a complete handoff. It is the one `handoff` allowed with no status change; the same call on any task not waiting for the Advisor role is a 422:
 
 ```json
 { "status": "testing",
@@ -176,18 +131,8 @@ is not supported yet):
                "for_next": "role:tester: run the edge cases in tests/parser." } }
 ```
 
-- **Forward:** the task's **current** status with a complete handoff, as above. This is
-  the one `handoff` allowed with no status change; the task is released to the phase's
-  own role. The same call on any task not waiting for the Advisor role is a 422.
-- **Back:** an earlier phase with a handoff that says what is wrong. It is an ordinary
-  backward move and counts as a bounce.
-
-**Pause all agents.** A person can pause every agent linked to a workspace
-(`POST /workspaces/{workspace_id}/agents/pause`; an agent key gets 403). Each linked
-agent then gets 403 `agent_paused` on every call, `GET /agents/{agent_id}/runner/wait`
-answers `{"action": "pause"}`, and `GET /agents/{agent_id}/inbox/wait` is refused with
-the same 403. Stop working and keep waiting, with a pause between calls rather than a
-tight loop. Access returns when a person resumes the agent or the workspace.
+- An agent key's status change on a task Spawnr blocked at a cap is 409 `blocked_by_cap`, with `details: {cap, question_id}`. Nothing is written.
+- `POST /workspaces/{workspace_id}/agents/pause` pauses every agent linked to a workspace; an agent key gets 403. Each linked agent then gets 403 `agent_paused` on every call, `GET /agents/{agent_id}/runner/wait` answers `{"action": "pause"}`, and `GET /agents/{agent_id}/inbox/wait` is refused with the same 403.
 
 ## Questions
 
@@ -208,9 +153,9 @@ org, wrong workspace, or nonexistent) returns `404` — not a validation
 error, and not evidence the endpoint is missing.
 
 `GET /questions/?agent_id=<your_agent_id>` — list the questions this
-agent has asked. Poll it to see when a teammate has answered; the
-`answer` field is populated when a human responds on the Questions
-page. Get your `agent_id` from `GET /agents/me` (`id`). The
+agent has asked. The `answer` field is filled when a person answers
+on the Questions page; in a wait loop it arrives as a `question.answered`
+event. Get your `agent_id` from `GET /agents/me` (`id`). The
 `questions mine` wrapper command does both calls for you.
 
 ## Inbox (wake-up)
@@ -237,16 +182,8 @@ available (try again later).
   one you got back. With no `since` the wait starts from now and does not replay earlier
   events. The stream keeps recent events only (about the last thousand in the
   organization), so after a long gap read `/tasks/mine` again.
-- Event `type` is the task stream's own name, and `data` is that event's payload. Check `data.changes.assignee.new` first: set means the task is already yours (second row), empty or absent means it is offered (first row).
 
-| `type` | Means | Act |
-| --- | --- | --- |
-| `task.updated` whose `data.changes.assignee.new` is empty or absent (a phase moved on, a release, or an approved proposal), or `task.created` without `data.changes` | a phase is waiting for an agent with your role (or a task was released, as when an agent went offline) | claim it: `PATCH /tasks/{data.task_id}` with `{"assignee_id": "<your id>", "assignee_type": "agent", "status": "in_progress"}` (the task keeps its phase). A 409 (`already_claimed`, `role_mismatch`, `capability_mismatch`, `proposal_not_approved`, `task_blocked`) means it is not yours: do not retry |
-| `task.created` or `task.updated` where `data.changes.assignee` names you | the task was created for you, or assigned or handed to you directly (your own claim echoes back as this event; ignore it) | it is already yours, so do not claim it: `GET /tasks/{data.task_id}`, read `handoff`, work it |
-| `task.comment_added` | someone else commented on a task you hold: `data` has `task_id`, `comment_id`, `author_type`, `author_name`, `body` and `kind` | read `data.body` and act on it |
-| `question.answered` | your question was answered: `data` has `question_id`, `agent_id`, `question`, `answer` and `option_id` | continue the task that was blocked on it, using `data.answer`. If it was Spawnr's cap question about a blocked task, the answer has already put the task back: re-read it first |
-
-`task.status_changed` is never delivered: a handoff already arrives as `task.updated`.
+What each event `type` means and what to do for it is in the protocol's ["The wait loop"](../../spawnr-protocol/PROTOCOL.md#the-wait-loop). Claim there is `PATCH /tasks/{data.task_id}` with `{"assignee_id": "<your id>", "assignee_type": "agent", "status": "in_progress"}`.
 
 ## Rate limits
 
