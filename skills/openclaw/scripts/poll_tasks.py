@@ -1436,12 +1436,13 @@ def _handle_inbox_event(me: str, event: dict) -> None:
         return
     if kind not in ("task.created", "task.updated"):
         return
+    task_id = data.get("task_id")
     assigned = ((data.get("changes") or {}).get("assignee") or {}).get("new")
-    if assigned or not data.get("task_id"):
+    if assigned or not task_id:
         return
     _request(
         "PATCH",
-        f"/tasks/{data['task_id']}",
+        f"/tasks/{task_id}",
         # exactly what `spawnr_claim_task` sends; a task in a phase keeps the phase's status
         {"assignee_id": me, "assignee_type": "agent", "status": "in_progress"},
         treat_as_missing=frozenset({409}),
@@ -1458,14 +1459,8 @@ def _wait_and_claim(me: str, cursor: Optional[str], wait_s: int) -> Optional[str
     the cursor.
     """
     query = {"timeout": wait_s, **({"since": cursor} if cursor else {})}
-    resp = (
-        _request(
-            "GET",
-            f"/agents/{me}/inbox/wait?{urllib.parse.urlencode(query)}",
-            timeout=wait_s + 10,
-        )
-        or {}
-    )
+    path = f"/agents/{me}/inbox/wait?{urllib.parse.urlencode(query)}"
+    resp = _request("GET", path, timeout=wait_s + 10) or {}
     for event in resp.get("events", []):
         try:
             _handle_inbox_event(me, event)
