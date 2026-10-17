@@ -373,6 +373,8 @@ flow in **one call**:
 spawnr_claim_task({"task_id": "SPW-12", "flow": "674f1a2b3c4d5e6f7a8b9c33"})
 ```
 
+`flow` needs `task_id`: without one (auto-assignment) the call is refused with a 400.
+
 The server accepts it only when **all** of these hold:
 
 - the flow is open to agents (`allowed_for_agents`, the flow's "Agents may choose"
