@@ -1417,13 +1417,14 @@ def _work_task_safely(task: dict, handler: Callable[[dict], dict]) -> None:
 def _handle_inbox_event(me: str, event: dict) -> None:
     """Act on ONE inbox event. The server has already filtered to this agent.
 
-    * `task.created`, or `task.updated` that did not assign the task: a phase offered to
-      this agent's role. Claim it (the same PATCH `spawnr_claim_task` sends). A 409
-      (`already_claimed`, `role_mismatch`, `capability_mismatch`, `proposal_not_approved`,
-      `task_blocked`) means it is not ours: skip it, never retry. A claimed task shows up in
-      the next `/tasks/mine` listing and is worked there.
-    * `task.updated` carrying `changes.assignee.new`: the task was assigned to this agent
-      (the inbox only carries its own), so there is nothing to claim; the next listing works it.
+    * `task.created` without `changes`, or `task.updated` that did not assign the task: a
+      phase offered to this agent's role. Claim it (the same PATCH `spawnr_claim_task`
+      sends). A 409 (`already_claimed`, `role_mismatch`, `capability_mismatch`,
+      `proposal_not_approved`, `task_blocked`) means it is not ours: skip it, never retry. A
+      claimed task shows up in the next `/tasks/mine` listing and is worked there.
+    * `task.created` or `task.updated` carrying `changes.assignee.new`: the task was created
+      for this agent or assigned to it (the inbox only carries its own), so it is already
+      ours and there is nothing to claim; the next listing works it.
     * `task.comment_added` (on a task this agent holds) and `question.answered`: print the
       event as one JSON line for the operator. The handler is not called for them.
     * once SIGTERM has arrived (`_stopping`) nothing is claimed: the process is about to exit.

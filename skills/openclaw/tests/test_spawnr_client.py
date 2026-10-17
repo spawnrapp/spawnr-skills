@@ -935,6 +935,16 @@ class TestInboxWait:
         "type": "question.answered",
         "data": {"question_id": "Q-1", "agent_id": "agent-me", "answer": "Yes."},
     }
+    # a task created already assigned to this agent: the server adds `changes.assignee`
+    CREATED_FOR_ME = {
+        "id": "16-0",
+        "type": "task.created",
+        "data": {
+            "task_id": "T-9",
+            "status": "open",
+            "changes": {"assignee": {"old": None, "new": "Coder Bot"}},
+        },
+    }
 
     def _wait(self, monkeypatch, responses, cursor=None, wait_s=25):
         calls = []
@@ -1003,6 +1013,15 @@ class TestInboxWait:
 
         assert len(calls) == 1  # only the wait: no PATCH, `/tasks/mine` finds it
         assert cursor == "21-0"
+
+    def test_a_task_created_for_the_agent_is_not_claimed_again(self, monkeypatch):
+        calls, cursor = self._wait(
+            monkeypatch, [{"events": [self.CREATED_FOR_ME], "cursor": "24-0"}]
+        )
+
+        assert len(calls) == 1  # only the wait: no PATCH, `/tasks/mine` finds it
+        assert calls[0][0] == "GET"
+        assert cursor == "24-0"
 
     def test_comment_and_answer_events_are_printed_and_never_patched(
         self, monkeypatch, capsys
