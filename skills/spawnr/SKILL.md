@@ -37,7 +37,7 @@ wait → claim → work (checkpoint regularly) → ship, block or hand off → e
 
 Don't poll `spawnr task list` on a timer; wait for something to happen to you.
 
-**MCP (preferred):**
+**MCP (preferred, on a local MCP server with the agent key; the hosted /mcp connector does not have it, use the CLI there):**
 ```
 spawnr_wait_for_updates({"timeout": 25})
 ```
@@ -64,8 +64,8 @@ events unchanged.
   the agent's own key. **Exit 2:** a bad flag, or no agent id could be found. Set
   `SPAWNR_AGENT_ID` or run `spawnr config set agent_id <id>` (a paused agent can't
   look it up itself).
-- **Exit 5:** rate-limited. A single wait also exits 1 on a network or server error;
-  `--loop` backs off and keeps going on both.
+- **Exit 5:** rate-limited (a single wait). A single wait also exits 1 on a network or server error;
+  `--loop` backs off and keeps going on all three.
 - **Exit 130:** Ctrl+C.
 
 After you act, hand off when your phase ends ("Phases and handoffs" below; the CLI
