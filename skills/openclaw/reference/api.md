@@ -59,6 +59,25 @@ than `todo` or `active` (e.g. `bug/default`'s `closed` and `wont_fix`).
 `blocked` is an `active` status, not a terminal one. Transitions are
 recorded in `/tasks/{task_id}/history` and surface on the Activity Feed.
 
+`POST /tasks` — create a task. An agent key (`X-API-Key`) creates only a
+**proposal**: a task or bug that is a child of a story, task or bug this agent
+holds.
+
+```json
+{ "title": "Count rejected payloads", "workspace_id": "<parent's workspace id>",
+  "parent_id": "<id of the task you hold>" }
+```
+
+The response carries `proposal_state`: `"pending"` until a person approves it,
+or `"approved"` for an agent with autonomous trust. A person who rejects it
+cancels it and posts the reason as a comment on the task. A missing `parent_id`,
+or one this agent does not hold, is 403 `AGENT_NOT_PERMITTED`; an agent cannot
+create a story. Claiming a `pending` or `rejected` proposal (a `PATCH` that sets
+`assignee_id` to this agent, or naming the agent as `assignee_id` in this
+request) is 409 `proposal_not_approved`, with the state in
+`details.proposal_state`: do not retry, work another task, and read
+`proposal_state` on `GET /tasks/{task_id}` to see when a person has approved it.
+
 ## Questions
 
 `POST /questions/` — block on a clarifying question. `CreateQuestionRequest`

@@ -19,6 +19,7 @@ Activate this skill when the user wants to:
 - look up or search tasks ("find the auth task", "show me task T-12")
 - check epic, release, or portfolio progress
 - create, update, comment on, complete, or hand off a task via the MCP tools
+- add work under a task you hold (agent persona: propose a subtask)
 
 It assumes the Spawnr MCP server is already connected. If no `spawnr_*` tools are
 available, set it up first (`mcp/README.md`) — do not guess credentials.
@@ -48,6 +49,7 @@ reaching for a raw list and reconstructing the answer by hand.
 | "Show me everything about this one task" | `spawnr_get_task` |
 | "Which workspaces can I see?" (orientation) | `spawnr_list_workspaces` |
 | "export what I learned / build context for next session" | `spawnr_export_memory` (agent persona only) |
+| "I found more work under a task I hold" | `spawnr_propose_subtask` (agent persona only) |
 
 - **`spawnr_get_my_work`** returns the caller's own active tasks (priority-sorted),
   blocked tasks, and pending questions in one call. Prefer it over searching for
@@ -66,6 +68,9 @@ reaching for a raw list and reconstructing the answer by hand.
   progress and surfaces dependency conflicts the raw list cannot.
 - **`spawnr_get_task`** gives full detail for one task, including checkpoints and
   comments, when the user wants the whole picture.
+- **`spawnr_propose_subtask`** (agent persona only) is the one way an agent adds
+  work. The new task is a proposal that waits for a person; see "Proposals
+  (`proposal_not_approved`)" below.
 
 ## Confirm-relay etiquette (write tools)
 
@@ -173,11 +178,12 @@ same task at once, exactly one gets `ok: true` and the other gets this error.
 The agent tools have no way to reassign a task: `spawnr_claim_task` can only
 assign you, and `spawnr_update_task_status` sends no assignee. With an agent key,
 any other assignee write (a raw REST call) returns 403 `agent_cannot_reassign`,
-and an agent key also cannot delete a task, write an epic, or create a task
-except as a subtask of one it holds (403 `AGENT_NOT_PERMITTED`). Through an MCP
-tool, any of these comes back in the same `{ok: false, error: {…}}` envelope
-with the code at `error.code`. A raw REST response carries it as the top-level
-`code`. See `docs/error-codes.md`.
+and an agent key also cannot delete a task, write an epic, or create a top-level
+task (403 `AGENT_NOT_PERMITTED`), or a story at all: it adds work only with
+`spawnr_propose_subtask`, as a child of an item it holds (Proposals, below).
+Through an MCP tool, any of these comes back in the same
+`{ok: false, error: {…}}` envelope with the code at `error.code`. A raw REST
+response carries it as the top-level `code`. See `docs/error-codes.md`.
 
 To pass a task on from the agent persona, set it `blocked` with a `summary` that
 says why and who should take it (`spawnr_update_task_status`), and let a person
@@ -244,6 +250,75 @@ is never refused, because a person can assign a task to an agent whatever its ca
 
 Auto-dispatch never offers such a task. `spawnr_claim_task({})` silently skips
 every task you could not claim by name, and answers 404 when none is left.
+
+## Proposals (`proposal_not_approved`)
+
+An agent key does not create tasks of its own. It **proposes** one, with
+`spawnr_propose_subtask`, as a child of a story, task or bug it holds:
+
+```
+spawnr_propose_subtask({
+  "task_id": "SPW-12",
+  "title": "Count rejected payloads",
+  "description": "A metric on the enqueue path.",
+  "area": "backend"
+})
+```
+
+- `task_id` is the parent: an item assigned to you (an ObjectId or a display id).
+  The new task is created in the parent's workspace. `description` and `area` are
+  optional; `area: "backend"` tags the task `area:backend`, so once it is
+  approved only agents that carry that area are offered it (Roles section above).
+- It returns `{ok, data: {id, display_id, title, message, proposal_state}}`.
+- A `task_id` you do not hold is refused with 403 `AGENT_NOT_PERMITTED`, and
+  nothing is created. There is no way to create a top-level task, and an agent
+  cannot create a story at all.
+
+**A proposal waits for a person.** The new task has `proposal_state: "pending"`.
+Until a person with the approve right decides it (on the **Approvals** page,
+under **Agent proposals**), no agent can claim it, you included.
+
+- **Approved** (`proposal_state: "approved"`): it is an ordinary unassigned task
+  and can be claimed under the usual rules (`already_claimed` and
+  `capability_mismatch`, above).
+- **Rejected** (`proposal_state: "rejected"`): the task is canceled and the
+  person's reason is posted as a comment on it.
+- **Autonomous trust:** an agent whose trust level is `autonomous` has its
+  proposal approved at once. The tool result already says
+  `proposal_state: "approved"`, and there is nothing to wait for.
+
+`spawnr_show_task` shows `proposal_state` (`null` on any task that is not a
+proposal) and the comments, so it is where you read the outcome.
+
+`spawnr_claim_task` on a proposal that a person has not approved is refused with
+a **409** and its own `code`:
+
+```json
+{ "ok": false,
+  "error": {
+    "status_code": 409,
+    "code": "proposal_not_approved",
+    "detail": {
+      "error": "This task is a proposal that a person has not approved, so it can't be claimed. Do not retry: pick another task, or wait until it is approved.",
+      "code": "proposal_not_approved",
+      "details": { "proposal_state": "pending" } } } }
+```
+
+`details.proposal_state` is `pending` or `rejected`. **Tell it from `task_blocked`,
+`already_claimed` and `capability_mismatch` by `error.code`, never by
+`status_code`**: all four are 409.
+
+- `error.code == "proposal_not_approved"` — **do not retry the claim.** Pick
+  another task, or wait until a person approves the proposal. A rejected proposal
+  will never be approved.
+
+Auto-dispatch never offers such a task: `spawnr_claim_task({})` skips every
+proposal a person has not approved.
+
+**Not for the user persona.** `spawnr_propose_subtask` isn't listed for a
+person's OAuth session (local stdio or the hosted `/mcp` endpoint), and a call by
+name returns a 403. A person creates work with `spawnr_create_task`, and a
+person's task is not a proposal.
 
 ## Asking Structural Questions
 

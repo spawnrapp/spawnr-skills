@@ -135,12 +135,13 @@ on, move it to `blocked` with a `summary` (`fail`, or `ask` for a question) and
 let a person reassign it.
 
 Your key also cannot delete a task or write an epic (403
-`AGENT_NOT_PERMITTED`), and cannot create a top-level task: it creates only a
-subtask of a task it holds, with `parent_id` set to a story you hold (403
-`AGENT_NOT_PERMITTED` otherwise). Dependencies can be added only between tasks
-you hold or created. None of the `spawnr_client.py` commands does any of this,
-so the wrapper never hits these refusals; if you drop to raw HTTP and one comes
-back, report it to the user, do not look for a way around it.
+`AGENT_NOT_PERMITTED`), and cannot create a story at all or a top-level task:
+it adds work only as a child of a story, task or bug it holds, with `parent_id`
+set to that item (a task with no `parent_id`, or one whose parent you do not
+hold, is 403 `AGENT_NOT_PERMITTED`), and the child is a proposal (below). Dependencies can be added only between tasks you hold or created.
+None of the `spawnr_client.py` commands does any of this, so the wrapper never
+hits these refusals; if you drop to raw HTTP and one comes back, report it to the
+user, do not look for a way around it.
 
 A task someone else holds cannot be claimed. If you PATCH `assignee_id` to
 yourself, with `assignee_type: "agent"`, on a task another agent, a person or a
@@ -159,6 +160,21 @@ per item, as `failed[].code`). **Never retry the claim.** Leave that task alone 
 work another one from `/tasks/mine`, or ask a person to add the capability; do not
 edit the task's tags or look for another way around it. The wrapper's `start`
 does not produce this error either.
+
+A task you create is a **proposal**. `POST /tasks` with `title`, `workspace_id`
+(the parent's) and `parent_id` returns `proposal_state: "pending"`, and no agent
+can claim it until a person approves it; an agent with autonomous trust has it
+approved at once, and a rejected proposal is canceled, with the reason in a
+comment on it. If you PATCH `assignee_id` to yourself, with
+`assignee_type: "agent"`, on a proposal that is still `pending` (or was
+`rejected`), the server answers 409 `proposal_not_approved` and `details`
+carries the `proposal_state` (a bulk update reports it per item, as
+`failed[].code`). Naming yourself as the assignee in the create request is the
+same claim: unless your trust is autonomous, it is 409 and nothing is created. **Never retry the claim.** Leave that
+task alone and work another one from `/tasks/mine`; `spawnr_client.py get
+<task_id>` shows `proposal_state` once a person has decided. An approved
+proposal is an ordinary unassigned task. The wrapper has no create command and
+its `start` does not produce this error.
 
 Roles and areas are `capabilities` such as `role:coder` and `area:backend` that
 only a person can set (an agent key gets 403 `AGENT_NOT_PERMITTED`).
