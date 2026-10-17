@@ -20,6 +20,8 @@ Activate this skill when the user wants to:
 - check epic, release, or portfolio progress
 - create, update, comment on, complete, or hand off a task via the MCP tools
 - add work under a task you hold (agent persona: propose a subtask)
+- see which agent flow a task follows, or pick one (`flow`), or read a
+  `flow_not_allowed` refusal
 
 It assumes the Spawnr MCP server is already connected. If no `spawnr_*` tools are
 available, set it up first (`mcp/README.md`) — do not guess credentials.
@@ -319,6 +321,95 @@ proposal a person has not approved.
 person's OAuth session (local stdio or the hosted `/mcp` endpoint), and a call by
 name returns a 403. A person creates work with `spawnr_create_task`, and a
 person's task is not a proposal.
+
+## Agent flows (`flow`, `flow_not_allowed`)
+
+An **agent flow** is a named order of phases (workflow statuses, each owned by a
+role) that a workspace admin defines under Settings › Defaults. This section is
+about which flow a task follows and who may pick it. A task follows, in this
+order:
+
+1. its **own** flow (chosen on the task),
+2. else its **epic's** flow, but only when that flow is of the task's own item
+   type (a bug flow on an epic does not apply to a task in it),
+3. else the workspace **default** for its item type (`task`, `story` or `bug`),
+4. else no flow.
+
+**Read what applies.** `spawnr_show_task` and `spawnr_get_task` return
+`agent_flow`: `null` when the task follows no flow, otherwise the whole flow
+(`id`, `name`, `phases`, `allowed_for_agents`, `caps`, and the rest) plus
+`source`: `"task"`, `"epic"` or `"workspace"`, which says which of the three
+levels gave it. They also return `agent_flow_id`, the choice made on the task
+itself: a flow id, the string `"none"` (a person chose "No flow", which beats the
+epic and the default), or `null` (nothing chosen, so it inherits).
+
+**A flow is named by its id, never by its name.** Get an id from one of three
+places:
+
+- `agent_flow.id` in `spawnr_show_task`, for the flow the task already follows;
+- `GET /api/v1/workspaces/{workspace_id}/agent-flows` (a raw REST call with your
+  API key; an agent key can read it for a workspace it is assigned to). It lists
+  `flows` (each with `id`, `name`, `item_type`, `allowed_for_agents`) and the
+  workspace `defaults`;
+- the operator or a person: ask them (`spawnr_ask_question`, below).
+
+An id that is not a flow of the task's workspace and item type, or is malformed, is a
+**422** with `agent_flow_id must name a <type> flow of this task's workspace, or
+"none".` Check the id and the task's type; do not guess a name.
+
+**User persona** (a person's OAuth session). `spawnr_create_task` and
+`spawnr_update_task` take `flow`: a flow id, or `"none"` for no flow. Leave it out
+and the task inherits by the order above. A person may set **any** flow of the
+task's item type, including one closed to agents. `spawnr_update_task` cannot send
+null, so to go back to inheriting, use the dashboard (Change flow) or the REST
+`PATCH` with `agent_flow_id: null`. Changing a flow keeps the task's status and
+assignee, and writes an "Agent flow changed from … to …" row in History.
+
+**Agent persona.** `spawnr_claim_task` takes `flow` too, and claims and sets the
+flow in **one call**:
+
+```
+spawnr_claim_task({"task_id": "SPW-12", "flow": "674f1a2b3c4d5e6f7a8b9c33"})
+```
+
+The server accepts it only when **all** of these hold:
+
+- the flow is open to agents (`allowed_for_agents`, the flow's "Agents may choose"
+  setting). When it is off, agents only follow the flow when it is the default or
+  a person assigns it;
+- the task's **epic** flow, if the epic gives this task one, is open to agents
+  too. No epic, an epic with no flow, or an epic flow of another item type adds
+  no check;
+- you are claiming the task in this call, or you already hold it. An agent
+  cannot set a flow on a task that is free or that another agent holds;
+- you are naming a flow. An agent cannot remove one: `"none"` or null is refused.
+
+`spawnr_propose_subtask` is not how an agent picks a flow, and a create that
+names one is refused with the same 403. A proposal starts with no flow of its own,
+so it follows the workspace default for its type until a person picks another.
+Omit `flow` to claim under whatever the task already follows.
+
+Anything else is a **403** with its own `code`, and **nothing in the request is
+written**: a refused claim does not claim.
+
+```json
+{ "ok": false,
+  "error": {
+    "status_code": 403,
+    "code": "flow_not_allowed",
+    "detail": {
+      "error": "This flow is not open to agents. Do not retry with it: claim without a flow, or ask a person to set it.",
+      "code": "flow_not_allowed",
+      "details": { "flow_id": "674f1a2b3c4d5e6f7a8b9c33" } } } }
+```
+
+`details.flow_id` is the id you sent, never a name. **Do not retry with that
+flow.** Claim again without `flow` (the task keeps the flow it follows), or ask a
+person to set it (`spawnr_ask_question`). Tell it from the other claim refusals by
+`error.code`; `already_claimed` still comes first, so a task someone else holds
+is a 409 whatever `flow` says.
+
+An OAuth session acts as the person: it is never refused with `flow_not_allowed`.
 
 ## Asking Structural Questions
 
