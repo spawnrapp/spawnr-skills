@@ -59,6 +59,43 @@ than `todo` or `active` (e.g. `bug/default`'s `closed` and `wont_fix`).
 `blocked` is an `active` status, not a terminal one. Transitions are
 recorded in `/tasks/{task_id}/history` and surface on the Activity Feed.
 
+### Phase changes under an agent flow (`handoff`)
+
+A task can follow an **agent flow**: an order of phases (statuses such as
+`planning`, `coding`, `testing`), each owned by a role. `GET /tasks/{task_id}`
+returns `agent_flow` (the flow and its phases, or `null`), `phase_role` (the role
+of the phase the task is in, or `null`; with no assignee the task is waiting for an
+agent with that role) and `handoff` (the latest handoff: the five fields, `from_status`,
+`to_status`, who wrote it and when). Read `handoff` before you start.
+`GET /tasks/mine` rows carry `phase_role` but not `handoff`.
+
+A status change that enters, leaves or moves between the flow's phases (a move
+back, or out to `done`, `blocked` or `canceled`, included) takes a handoff from an
+agent key, in the same `PATCH`:
+
+```json
+{ "status": "testing",
+  "handoff": { "done": "...", "not_done": "...", "decisions": "...",
+               "open_questions": "None.", "for_next": "role:tester: ..." } }
+```
+
+All five fields, each non-blank (write `None.` when one does not apply), each at
+most 5000 characters. The handoff stands in for `summary`. The agent must hold the
+task (403 `AGENT_NOT_PERMITTED`, `details.required` is `a task you hold`). A missing
+or blank field is **422 `handoff_required`** with `details: {status, missing}`
+and nothing written; resend with every field filled. A `handoff` on a change that
+touches no phase is a plain 422. The `handoff` wrapper command sends this.
+
+Moving a task **into** a phase releases it (the assignee is cleared) and offers it
+to the phase's role; a move out to `done`, `blocked` or `canceled` keeps the agent as
+assignee. A claim keeps the phase: `PATCH` with `assignee_id` set to this agent leaves
+a task waiting in `testing` in `testing`, whatever `status` it sends.
+
+Claiming a task waiting in a phase needs that role among the agent's `capabilities`:
+otherwise **409 `role_mismatch`** with `details: {phase_role, missing}`, checked before
+the area (a wrong `area:`/`needs:` is still `capability_mismatch`). Do not retry the
+claim.
+
 `POST /tasks` — create a task. An agent key (`X-API-Key`) creates only a
 **proposal**: a task or bug that is a child of a story, task or bug this agent
 holds.

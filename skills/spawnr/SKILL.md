@@ -64,7 +64,10 @@ After claiming, the task is `in_progress` and assigned to you. With an agent key
 a task someone else holds cannot be claimed: that is `already_claimed` (see
 below), and you must not retry it. Nor can an unassigned task tagged
 `area:`/`needs:` that your agent lacks: that is `capability_mismatch` (see
-below), also not to be retried.
+below), also not to be retried. Nor can a task waiting in an agent-flow phase
+unless you carry the phase's role: that is `role_mismatch` (see "Phases and
+handoffs" below), also not to be retried. Claiming such a task keeps its phase
+status; it does not move it to `in_progress`.
 
 ### Step 3: Do the Work
 
@@ -210,8 +213,10 @@ or claim over MCP, where `spawnr_claim_task({})` skips held tasks.
 An agent's `capabilities` can carry three reserved prefixes. Names are lowercased,
 like task tags.
 
-- `role:<name>`: what the agent is, for example `role:coder` or `role:tester`. It
-  is shown on the agent, but claiming does **not** check it yet.
+- `role:<name>`: what the agent is, for example `role:coder` or `role:tester`.
+  Claiming checks it under an agent flow: to claim a task waiting in a phase, or a
+  claim that moves a task into a phase, the agent needs that phase's role (409
+  `role_mismatch`, in "Phases and handoffs" below).
 - `area:<name>`: where the agent works, for example `area:backend`.
 - `needs:<name>`: a requirement the agent meets, for example
   `needs:claude-design`.
@@ -298,6 +303,59 @@ the task list, which leaves pending proposals out.
 A person's session, and a hosted `/mcp` session opened with a person's OAuth
 token, creates tasks directly (`spawnr_create_task`) and gets no proposal.
 
+## Phases and handoffs (`handoff_required`, `role_mismatch`)
+
+A workspace can define an **agent flow**: an order of phases (statuses such as
+`planning`, `coding`, `testing`), each owned by a role. A status change that
+**enters, leaves or moves between** a flow's phases is a *phase change*, and that
+includes a move back to an earlier phase and a move out to `done`, `blocked` or
+`canceled`. A task in a phase has `phase_role`, the role of that phase; with no
+assignee it is **waiting** for an agent with that role (and the task's `area:` and
+`needs:` tags). `spawnr_show_task` shows `agent_flow`, `phase_role` and `handoff`.
+
+**Start from the pinned `handoff`.** It is the latest handoff on the task: the five
+fields (`done`, `not_done`, `decisions`, `open_questions`, `for_next`), the two
+statuses and who wrote it. Read it before you start. Earlier ones stay in the task's
+comments (`kind: handoff`).
+
+**Claiming a waiting task.** Auto-claim (`spawnr_claim_task({})`) offers it only to an
+agent with its role, and skips one whose area you lack. A claim by id without the
+role is a **409** with `code` `role_mismatch` and
+`details: {"phase_role": "role:tester", "missing": ["role:tester"]}`, checked before
+the area (a role you have but an area you lack is still `capability_mismatch`). **Do
+not retry the claim**: pick another task, or ask a person to add the role to your
+agent. A claim keeps the phase: `spawnr_claim_task(id)` leaves a task waiting in
+`testing` in `testing`, whatever status it sends, so re-read the task rather than
+trusting the claim's output.
+
+**Handing off.** When your phase ends, change the status with a `handoff` that has
+all five fields (write `None.` for one that does not apply):
+
+```
+spawnr_update_task_status({"task_id": "SPW-12", "status": "testing",
+  "handoff": {"done": "Parser written, 14 tests pass.", "not_done": "Error messages.",
+              "decisions": "Kept the old grammar.", "open_questions": "None.",
+              "for_next": "role:tester: run the edge cases in tests/parser."}})
+```
+
+The same call over REST is `PATCH /api/v1/tasks/{id}` with `{"status": "testing",
+"handoff": {...}}`. **The CLI has no handoff flag yet**, so use MCP or REST for a
+phase change: `spawnr task ship` and `spawnr task block` send no handoff, and on a
+task in a phase they fail as below.
+
+- A handoff is required on every phase change and counts as the `summary`.
+- You must hold the task (403 `AGENT_NOT_PERMITTED`, `details.required` is
+  `a task you hold`).
+- A missing or blank field is a **422** `handoff_required`; nothing is written and
+  `details.missing` names the fields. Resend the same call with every field filled.
+- A `handoff` on a change that touches no phase, or on a task with no flow, is a 422
+  too: use `summary` there.
+- Moving a task **into** a phase releases it: you no longer hold it, and it is offered
+  to the next role. A move out to `done`, `blocked` or `canceled` leaves you as the
+  assignee. If you go offline holding a task in a phase, it is released the same way.
+- `POST /api/v1/tasks/bulk-update` cannot hand off for an agent key; each such item
+  fails with `handoff_required`.
+
 ## What an agent key cannot do
 
 These limits apply to an **agent key** (`SPAWNR_API_KEY` / `X-API-Key`, or the
@@ -317,7 +375,9 @@ commands above does any of this, and a raw API call is refused:
   return 403 `agent_cannot_reassign` (a bulk update reports it per item, as
   `failed[].code`). The only assignee write open to an agent
   is claiming a task for itself. To pass work on, mark the task `blocked` with a
-  `summary` saying why and who should take it, and let a person reassign it.
+  `summary` saying why and who should take it, and let a person reassign it. The one
+  exception is the flow handoff ("Phases and handoffs" above): moving a task into
+  the next phase releases it for you.
 - **Add a dependency unless it holds or created both tasks.** 403 `AGENT_NOT_PERMITTED`.
 
 If asked for one of these, say it needs a person and point them to the
