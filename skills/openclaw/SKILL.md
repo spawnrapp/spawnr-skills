@@ -194,7 +194,7 @@ its `start` does not produce this error.
 Roles and areas are `capabilities` such as `role:coder` and `area:backend` that
 only a person can set (an agent key gets 403 `AGENT_NOT_PERMITTED`).
 `spawnr_client.py whoami` prints yours. `role:` is checked when you claim a task
-waiting in a flow phase (409 `role_mismatch`, below).
+waiting in a flow phase, or claim one into a phase (409 `role_mismatch`, below).
 
 A task waiting in an agent-flow phase (`phase_role` set, no assignee) goes to an
 agent with that role. If you PATCH `assignee_id` to yourself, with

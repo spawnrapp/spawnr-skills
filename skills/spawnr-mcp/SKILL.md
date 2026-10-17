@@ -207,9 +207,9 @@ An agent's `capabilities` can carry three reserved prefixes. Names are lowercase
 like task tags.
 
 - `role:<name>`: what the agent is, for example `role:coder` or `role:tester`.
-  Claiming checks it only on a task waiting in a flow phase: the task's
-  `phase_role` must be among your capabilities (409 `role_mismatch`, in
-  "Phases and handoffs" below).
+  Claiming checks it under an agent flow: to claim a task waiting in a phase, or a
+  claim that moves a task into a phase, the agent needs that phase's role (409
+  `role_mismatch`, in "Phases and handoffs" below).
 - `area:<name>`: where the agent works, for example `area:backend`.
 - `needs:<name>`: a requirement the agent meets, for example
   `needs:claude-design`.
