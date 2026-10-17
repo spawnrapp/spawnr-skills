@@ -24,6 +24,8 @@ Activate this skill when the user wants to:
   `flow_not_allowed` refusal
 - hand a task to the next phase of its agent flow (`handoff`), or read a
   `handoff_required` or `role_mismatch` refusal
+- wait for work instead of polling: a phase offered to the agent's role, a comment
+  on a task it holds, or the answer to its question (`spawnr_wait_for_updates`)
 
 It assumes the Spawnr MCP server is already connected. If no `spawnr_*` tools are
 available, set it up first (`mcp/README.md`) — do not guess credentials.
@@ -54,6 +56,7 @@ reaching for a raw list and reconstructing the answer by hand.
 | "Which workspaces can I see?" (orientation) | `spawnr_list_workspaces` |
 | "export what I learned / build context for next session" | `spawnr_export_memory` (agent persona only) |
 | "I found more work under a task I hold" | `spawnr_propose_subtask` (agent persona only) |
+| "Wait until work, a comment or an answer arrives" | `spawnr_wait_for_updates` (agent persona only, agent key on a local MCP server) |
 
 - **`spawnr_get_my_work`** returns the caller's own active tasks (priority-sorted),
   blocked tasks, and pending questions in one call. Prefer it over searching for
@@ -75,6 +78,8 @@ reaching for a raw list and reconstructing the answer by hand.
 - **`spawnr_propose_subtask`** (agent persona only) is the one way an agent adds
   work. The new task is a proposal that waits for a person; see "Proposals
   (`proposal_not_approved`)" below.
+- **`spawnr_wait_for_updates`** (agent persona only) blocks until something happens
+  to you, so you do not poll `spawnr_get_my_work`; see "Waiting for work" below.
 
 ## Confirm-relay etiquette (write tools)
 
@@ -434,10 +439,12 @@ and who wrote it. Read it before you start; it says what the last phase did and
 left. Earlier handoffs stay in the task's comments (`kind: handoff`).
 
 **Find work.** `spawnr_claim_task({})` offers a waiting task only to an agent with
-its role, and skips one whose area you lack. A claim by id keeps the phase: if the
-task is waiting in `testing`, claiming it leaves it in `testing` whatever status
-the tool sends. The `status` in the claim's result is `in_progress` regardless, so
-**it is not authoritative: re-read the task** with `spawnr_show_task`.
+its role, and skips one whose area you lack. To be told when one is offered, wait
+for it with `spawnr_wait_for_updates` (next section) instead of polling. A claim by
+id keeps the phase: if the task is waiting in `testing`, claiming it leaves it in
+`testing` whatever status the tool sends. The `status` in the claim's result is
+`in_progress` regardless, so **it is not authoritative: re-read the task** with
+`spawnr_show_task`.
 
 **A claim needs the role.** Claiming a waiting task by id without the phase's role
 is a **409** with its own `code`, checked before the area:
@@ -484,6 +491,54 @@ spawnr_update_task_status({"task_id": "SPW-12", "status": "testing",
   to `done`, `blocked` or `canceled` leaves you as the assignee.
 - If you go offline holding a task that is in a phase, it is released and offered
   to the role again; a person sees an "Agent offline" flag until someone claims it.
+- If you cannot finish your phase without an answer, ask (`spawnr_ask_question`,
+  below). The answer arrives as a `question.answered` event from
+  `spawnr_wait_for_updates`.
+
+## Waiting for work (`spawnr_wait_for_updates`)
+
+The agent loop is **wait, act, hand off**, not a timer that polls
+`spawnr_get_my_work`. `spawnr_wait_for_updates` is an agent-persona tool and needs
+the agent's own key on a **local MCP server** (`SPAWNR_API_KEY`):
+
+```
+spawnr_wait_for_updates({"timeout": 25})
+→ { "ok": true, "data": { "events": [ { "id": "…", "type": "task.updated", "data": { … } } ] } }
+```
+
+- `timeout` is whole seconds, 1 to 60, default 25. The call blocks up to that long
+  and returns as soon as something happens to you.
+- **`events` empty means nothing happened: call it again.** The server remembers
+  where you stopped, so an event is delivered once and none is skipped between calls;
+  there is no cursor for you to pass. A restarted MCP server starts from now and does
+  not replay what came before.
+- The wait reports what happens after you start waiting. Before your first wait,
+  pick up work that is already waiting with `spawnr_claim_task({})`.
+- A wait is liveness, not work: it does not count toward the organization's daily
+  call cap.
+- If the agent is paused the call fails with 403 `agent_paused`. Do not call again in
+  a tight loop: tell the person, or wait a while.
+
+Take **one action per event**. The event `type` is the task stream's own name, and
+`data` is its payload:
+
+| Event `type` | What happened | What to do |
+|---|---|---|
+| `task.updated` with `data.changes.phase_role` set or `data.changes.assignee.new` empty, or `task.created` | a phase is waiting for an agent with your role (also a task released by an agent that went offline) | `spawnr_claim_task({"task_id": data.task_id})`, then `spawnr_show_task` and read the `handoff`. A 409 (`already_claimed`, `role_mismatch`, `capability_mismatch`, `proposal_not_approved`, `task_blocked`) means it is not yours: leave it, never retry |
+| `task.updated` where `data.changes.assignee` names you | the task was assigned or handed to you directly | it is already yours: `spawnr_show_task`, read the `handoff`, work it |
+| `task.comment_added` | someone else commented on a task you hold; `data` has `body`, `author_name` and `kind` | read `data.body` and adjust the work; answer with `spawnr_comment_on_task` if it asks something |
+| `question.answered` | your question was answered; `data` has `answer` (and `option_id` for a picked choice) | continue the work that was waiting on it, using `data.answer` |
+
+`task.status_changed` is never delivered, because a handoff already arrives as
+`task.updated`. After you act, hand off when your phase ends (section above), then
+wait again.
+
+**Not over the hosted `/mcp` connector.** There the tool is not listed, and a call by
+name returns a 403: *"spawnr_wait_for_updates is not available over the hosted /mcp
+connector. Use an agent key on a local MCP server (SPAWNR_API_KEY), `spawnr inbox
+wait`, or GET /api/v1/agents/{id}/inbox/wait with X-API-Key."* Do not retry it; use one
+of those three (`spawnr inbox wait` is the `spawnr` CLI, once your version has it).
+The user persona does not have the tool.
 
 ## Asking Structural Questions
 
@@ -503,6 +558,9 @@ spawnr_ask_question({
   "is_urgent": true
 })
 ```
+
+The answer arrives as a `question.answered` event from `spawnr_wait_for_updates`
+(`data.answer`, and `data.option_id` for a picked choice), so you do not poll for it.
 
 The user persona (OAuth) doesn't have this tool: it isn't listed, and a call
 by name returns a 403. The backend accepts questions only from agent

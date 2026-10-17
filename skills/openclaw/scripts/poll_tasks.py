@@ -4,6 +4,12 @@ poll_tasks — long-running worker loop that drives Spawnr tasks through an
 actionable -> claimed -> done pipeline, one legal workflow transition at a
 time.
 
+Each round lists the tasks this agent holds and works them, then WAITS on the
+agent's inbox (`GET /agents/{id}/inbox/wait`) for up to `--interval` seconds
+instead of sleeping, so an offered phase, a comment on a task it holds or an
+answer to its question wakes the loop within a second. See `_handle_inbox_event`
+for what each event does.
+
 Pass `--handler module:function` pointing at a callable that accepts the
 task dict and returns a result dict:
 
@@ -26,6 +32,10 @@ Environment variables:
   SPAWNR_API_KEY        required
   SPAWNR_WORKSPACE_ID   optional; narrows to a single workspace
 
+Event lines: a comment or an answer is printed to stdout as one JSON line,
+`{"event": "task.comment_added" | "question.answered", "data": {...}}`; the
+handler is not called for it. Work results stay `{"task_id": ..., "result": ...}`.
+
 Example:
   poll_tasks.py --handler my_agent:handle --interval 30
   poll_tasks.py --handler my_agent:handle --statuses backlog,needs_triage
@@ -38,8 +48,10 @@ import importlib
 import json
 import os
 import signal
+import socket
 import sys
 import time
+import urllib.parse
 from collections import deque
 from typing import Any, Callable, Optional
 
@@ -51,6 +63,7 @@ from spawnr_client import (  # noqa: E402
     _HANDOFF_FIELDS,
     _MAX_TASK_SUMMARY_LEN,
     _TASKS_MINE_SERVER_CAP,
+    _my_agent_id,
     _request,
     _warn_unknown_status,
 )
@@ -190,7 +203,8 @@ def _list_actionable_tasks(
 
     # US-031.5: a task this agent holds in an agent-flow phase (`phase_role` set) is its
     # to work whatever the phase is called, so it is kept even when its status is not a
-    # "not started" one. (Picking up an offered phase waits for the inbox, US-031.6.)
+    # "not started" one. (US-031.6: a phase offered to this agent's role is claimed from
+    # the inbox wait in `_handle_inbox_event`, and then arrives here.)
     actionable = [t for t in tasks if t.get("status") in wanted or t.get("phase_role")]
 
     # #1256: drop dependency-blocked tasks here, BEFORE `_work_task` ever
@@ -1398,6 +1412,72 @@ def _work_task_safely(task: dict, handler: Callable[[dict], dict]) -> None:
         )
 
 
+# US-031.6: the wake-up. Event types are the task stream's own names.
+
+
+def _handle_inbox_event(me: str, event: dict) -> None:
+    """Act on ONE inbox event. The server has already filtered to this agent.
+
+    * `task.created`, or `task.updated` that did not assign the task: a phase offered to
+      this agent's role. Claim it (the same PATCH `spawnr_claim_task` sends). A 409
+      (`already_claimed`, `role_mismatch`, `capability_mismatch`, `proposal_not_approved`,
+      `task_blocked`) means it is not ours: skip it, never retry. A claimed task shows up in
+      the next `/tasks/mine` listing and is worked there.
+    * `task.updated` carrying `changes.assignee.new`: the task was assigned to this agent
+      (the inbox only carries its own), so there is nothing to claim; the next listing works it.
+    * `task.comment_added` (on a task this agent holds) and `question.answered`: print the
+      event as one JSON line for the operator. The handler is not called for them.
+    * anything else (`task.status_changed` included, a handoff already sends `task.updated`): ignored.
+    """
+    kind, data = event.get("type"), event.get("data") or {}
+    if kind in ("task.comment_added", "question.answered"):
+        sys.stdout.write(json.dumps({"event": kind, "data": data}) + "\n")
+        sys.stdout.flush()
+        return
+    if kind not in ("task.created", "task.updated"):
+        return
+    assigned = ((data.get("changes") or {}).get("assignee") or {}).get("new")
+    if assigned or not data.get("task_id"):
+        return
+    _request(
+        "PATCH",
+        f"/tasks/{data['task_id']}",
+        # exactly what `spawnr_claim_task` sends; a task in a phase keeps the phase's status
+        {"assignee_id": me, "assignee_type": "agent", "status": "in_progress"},
+        treat_as_missing=frozenset({409}),
+    )
+
+
+def _wait_and_claim(me: str, cursor: Optional[str], wait_s: int) -> Optional[str]:
+    """Long-poll the inbox once (<= `wait_s` seconds), act on each event, return the new cursor.
+
+    The cursor goes back as `since` on the next call, so an event is neither delivered twice
+    nor skipped; the first call (`cursor` None) starts from now. The socket timeout is
+    `wait_s` + 10: the request is held open for `wait_s` seconds on purpose. One event that
+    fails hard (`_request` exits) is reported and skipped, so it cannot hold back the rest or
+    the cursor.
+    """
+    query = {"timeout": wait_s, **({"since": cursor} if cursor else {})}
+    resp = (
+        _request(
+            "GET",
+            f"/agents/{me}/inbox/wait?{urllib.parse.urlencode(query)}",
+            timeout=wait_s + 10,
+        )
+        or {}
+    )
+    for event in resp.get("events", []):
+        try:
+            _handle_inbox_event(me, event)
+        except SystemExit:
+            sys.stderr.write(
+                f"poll_tasks: inbox event {event.get('type')} for task "
+                f"{(event.get('data') or {}).get('task_id')} failed unrecoverably (see the "
+                "error above) — skipping it and continuing.\n"
+            )
+    return resp.get("cursor") or cursor
+
+
 def _parse_statuses(raw: str) -> frozenset[str]:
     """Comma-separated `--statuses` override, spellchecked but never rejected.
 
@@ -1436,7 +1516,11 @@ def main() -> None:
         "--handler", required=True, help="'module:function' importable callable"
     )
     p.add_argument(
-        "--interval", type=int, default=30, help="poll interval seconds (default 30)"
+        "--interval",
+        type=int,
+        default=30,
+        help="seconds to wait on the inbox each round, clamped to 1-60 (default 30). "
+        "An idle poller stops on SIGTERM within this long.",
     )
     p.add_argument("--workspace", help="override SPAWNR_WORKSPACE_ID for this run")
     p.add_argument(
@@ -1458,24 +1542,32 @@ def main() -> None:
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
 
+    wait_s = max(1, min(args.interval, 60))
+    me: Optional[str] = None
+    cursor: Optional[str] = None
     while not _stopping:
         try:
+            me = me or _my_agent_id()
             tasks = _list_actionable_tasks(workspace, actionable_statuses)
         except SystemExit:
             # _request prints + exits on hard failure; convert to a sleep-retry
-            time.sleep(min(args.interval * 2, 120))
+            time.sleep(wait_s * 2)
             continue
 
         for task in tasks:
             if _stopping:
                 break
             _work_task_safely(task, handler)
+        if _stopping:
+            break
 
-        # Coarse sleep with a fast-exit on signal
-        slept = 0
-        while slept < args.interval and not _stopping:
-            time.sleep(1)
-            slept += 1
+        try:
+            cursor = _wait_and_claim(me, cursor, wait_s)
+        except (SystemExit, socket.timeout):
+            # A hard failure (403 agent_paused, 5xx past the retries) or a stalled socket:
+            # sleep-retry with the same cursor. An offer delivered again is a 409 or an
+            # idempotent claim, so nothing is lost or doubled.
+            time.sleep(wait_s * 2)
 
 
 if __name__ == "__main__":

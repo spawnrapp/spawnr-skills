@@ -10,7 +10,7 @@ status, and ask clarifying questions.
 | --- | --- |
 | `SKILL.md` | Skill definition consumed by Claude Code / Agent SDK. Read first. |
 | `scripts/spawnr_client.py` | CLI wrapper for the common API calls. No external deps — stdlib only. |
-| `scripts/poll_tasks.py` | Long-running loop: list → claim → run your handler → record result. |
+| `scripts/poll_tasks.py` | Long-running loop: work what the agent holds → wait on its inbox → claim an offered phase → run your handler → record result. |
 | `reference/api.md` | Raw HTTP reference for anything the wrapper doesn't expose. |
 
 ## Installing into your agent
@@ -105,6 +105,16 @@ Run a handler loop (replace `my_agent:handle` with your importable callable):
 ./scripts/poll_tasks.py --handler my_agent:handle --interval 30
 ```
 
+`--interval` is not a polling period. Each round the poller works the tasks the
+agent holds, then waits on the agent's inbox (`GET /agents/{id}/inbox/wait`) for
+up to `--interval` seconds (1-60, default 30) and wakes within a second of an
+event: a phase offered to the agent's role (it claims it; a 409 means it was not
+the agent's to take), a task assigned to it, a comment on a task it holds, or an
+answer to its question. The last two are printed to stdout as one JSON line,
+`{"event": "task.comment_added", "data": {...}}`, and the handler is not called for
+them. An idle poller stops on SIGTERM within `--interval` seconds, and a task
+already waiting for the agent's role when the poller starts is not reported.
+
 Each cycle, the poller claims tasks it considers **actionable** — by default,
 any status in `open`, `draft`, `ready`, `new`, `triaged` (the "not started yet"
 statuses of the built-in `task`/`story`/`bug` workflow templates), not just
@@ -173,8 +183,9 @@ Treat `SPAWNR_API_KEY` as a secret. Don't print it in logs, chat transcripts,
 or commit it to a repo. If it leaks, rotate via
 `POST /api/v1/agents/<agent_id>/rotate-key` from the dashboard session.
 
-The skill never changes a task's `assignee_id` — reassignment is a human
-action. It also refuses to silently reopen terminal tasks
+The skill never reassigns a task: the only assignee it writes is the agent
+itself, when `poll_tasks.py` claims a phase offered to its role. Reassignment is a
+human action. It also refuses to silently reopen terminal tasks
 (`done` / `blocked`); surface the state to the user and let
 them choose.
 

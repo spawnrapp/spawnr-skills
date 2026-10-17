@@ -25,7 +25,9 @@ Pydantic model as of this commit:
 
 from __future__ import annotations
 
+import json
 import os
+import socket
 import sys
 import urllib.error
 
@@ -640,6 +642,38 @@ def test_missing_if_detail_contains_non_matching_body_falls_through_and_exits(
     assert "Workspace not found" in err
 
 
+# ─── US-031.6: `_request(timeout=)` reaches urlopen (the inbox wait outlasts 30 s) ──
+
+
+class _OkResponse:
+    def __init__(self, raw: bytes = b"{}"):
+        self._raw = raw
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        return False
+
+    def read(self):
+        return self._raw
+
+
+def test_request_timeout_defaults_to_30_and_a_caller_value_reaches_urlopen(monkeypatch):
+    seen = []
+
+    def fake_urlopen(_req, timeout=None):
+        seen.append(timeout)
+        return _OkResponse()
+
+    monkeypatch.setattr(sc.urllib.request, "urlopen", fake_urlopen)
+
+    sc._request("GET", "/x")
+    sc._request("GET", "/y", timeout=35)
+
+    assert seen == [30, 35]
+
+
 # ---------------------------------------------------------------------------
 # poll_tasks._ensure_summary — #1130 guard on the shared outcome path.
 #
@@ -849,3 +883,214 @@ class TestPhasedTasks:
         assert body["handoff"]["not_done"] == "Handler raised RuntimeError: no network"
         assert body["handoff"]["for_next"]  # never blank: the server refuses it
         assert all(v.strip() for v in body["handoff"].values())
+
+
+class TestInboxWait:
+    """US-031.6: the poller waits on `GET /agents/{id}/inbox/wait` instead of sleeping.
+    An offered phase is claimed, a task assigned to the agent is left to the next
+    `/tasks/mine` listing, and comment and answer events are printed for the operator."""
+
+    ME = "agent-me"
+    CLAIM = {"assignee_id": "agent-me", "assignee_type": "agent", "status": "in_progress"}
+    OFFER_UPDATED = {
+        "id": "10-0",
+        "type": "task.updated",
+        "data": {
+            "task_id": "T-9",
+            "changes": {
+                "phase_role": {"old": "role:coder", "new": "role:tester"},
+                "assignee": {"old": "agent-a", "new": None},
+            },
+        },
+    }
+    OFFER_PHASE_ONLY = {
+        "id": "11-0",
+        "type": "task.updated",
+        "data": {
+            "task_id": "T-9",
+            "changes": {"phase_role": {"old": None, "new": "role:tester"}},
+        },
+    }
+    OFFER_CREATED = {
+        "id": "12-0",
+        "type": "task.created",
+        "data": {"task_id": "T-9", "title": "Proposal", "status": "open"},
+    }
+    ASSIGNED = {
+        "id": "13-0",
+        "type": "task.updated",
+        "data": {
+            "task_id": "T-9",
+            "changes": {"assignee": {"old": None, "new": "Coder Bot"}},
+        },
+    }
+    COMMENT = {
+        "id": "14-0",
+        "type": "task.comment_added",
+        "data": {"task_id": "T-9", "comment_id": "C-1", "body": "Use SQLite."},
+    }
+    ANSWER = {
+        "id": "15-0",
+        "type": "question.answered",
+        "data": {"question_id": "Q-1", "agent_id": "agent-me", "answer": "Yes."},
+    }
+
+    def _wait(self, monkeypatch, responses, cursor=None, wait_s=25):
+        calls = []
+        script = list(responses)
+
+        def fake(method, path, body=None, **kw):
+            calls.append((method, path, body, kw))
+            return script.pop(0) if script else {}
+
+        monkeypatch.setattr(pt, "_request", fake)
+        return calls, pt._wait_and_claim(self.ME, cursor, wait_s)
+
+    def test_the_first_wait_sends_no_since_and_reads_for_longer_than_it_waits(
+        self, monkeypatch
+    ):
+        calls, _ = self._wait(monkeypatch, [{"events": [], "cursor": "5-0"}])
+
+        method, path, body, kw = calls[0]
+        assert (method, path, body) == (
+            "GET",
+            f"/agents/{self.ME}/inbox/wait?timeout=25",
+            None,
+        )
+        assert kw["timeout"] == 35  # the socket outlasts the server's wait
+
+    def test_the_cursor_the_server_gave_is_returned_and_sent_back_as_since(
+        self, monkeypatch
+    ):
+        _, cursor = self._wait(monkeypatch, [{"events": [], "cursor": "5-0"}])
+        assert cursor == "5-0"
+
+        calls, _ = self._wait(monkeypatch, [{"events": [], "cursor": "6-0"}], cursor)
+
+        assert calls[0][1] == f"/agents/{self.ME}/inbox/wait?timeout=25&since=5-0"
+
+    def test_a_response_without_a_cursor_keeps_the_one_we_had(self, monkeypatch):
+        _, cursor = self._wait(monkeypatch, [{"events": []}], cursor="5-0")
+        assert cursor == "5-0"
+
+    @pytest.mark.parametrize("offer", [OFFER_UPDATED, OFFER_PHASE_ONLY, OFFER_CREATED])
+    def test_an_offered_phase_is_claimed_with_the_claim_body_and_a_409_is_not_fatal(
+        self, monkeypatch, offer
+    ):
+        calls, _ = self._wait(monkeypatch, [{"events": [offer], "cursor": "20-0"}])
+
+        assert len(calls) == 2
+        method, path, body, kw = calls[1]
+        assert (method, path, body) == ("PATCH", "/tasks/T-9", self.CLAIM)
+        assert kw["treat_as_missing"] == frozenset({409})
+
+    def test_a_409_on_one_claim_does_not_stop_the_next_event(self, monkeypatch):
+        second = dict(self.OFFER_CREATED, data={"task_id": "T-10"})
+        # the 409 is the PATCH answering None (`treat_as_missing`), the next gets {}
+        calls, cursor = self._wait(
+            monkeypatch,
+            [{"events": [self.OFFER_UPDATED, second], "cursor": "20-0"}, None],
+        )
+
+        assert [c[1] for c in calls[1:]] == ["/tasks/T-9", "/tasks/T-10"]
+        assert cursor == "20-0"
+
+    def test_a_task_assigned_to_the_agent_is_left_to_the_next_listing(self, monkeypatch):
+        calls, cursor = self._wait(
+            monkeypatch, [{"events": [self.ASSIGNED], "cursor": "21-0"}]
+        )
+
+        assert len(calls) == 1  # only the wait: no PATCH, `/tasks/mine` finds it
+        assert cursor == "21-0"
+
+    def test_comment_and_answer_events_are_printed_and_never_patched(
+        self, monkeypatch, capsys
+    ):
+        calls, _ = self._wait(
+            monkeypatch,
+            [{"events": [self.COMMENT, self.ANSWER], "cursor": "22-0"}],
+        )
+
+        assert len(calls) == 1
+        lines = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+        assert lines == [
+            {"event": "task.comment_added", "data": self.COMMENT["data"]},
+            {"event": "question.answered", "data": self.ANSWER["data"]},
+        ]
+
+    def test_other_event_types_are_ignored(self, monkeypatch, capsys):
+        status_changed = {"id": "23-0", "type": "task.status_changed", "data": {}}
+
+        calls, _ = self._wait(
+            monkeypatch, [{"events": [status_changed], "cursor": "23-0"}]
+        )
+
+        assert len(calls) == 1
+        assert capsys.readouterr().out == ""
+
+    def test_a_hard_failure_on_one_event_does_not_lose_the_rest_or_the_cursor(
+        self, monkeypatch, capsys
+    ):
+        second = dict(self.OFFER_CREATED, data={"task_id": "T-10"})
+        calls = []
+        script = [{"events": [self.OFFER_UPDATED, second], "cursor": "20-0"}]
+
+        def fake(method, path, body=None, **kw):
+            calls.append(path)
+            if script:
+                return script.pop(0)
+            if path == "/tasks/T-9":
+                raise SystemExit(1)  # `_request` exits on a 403/5xx
+            return {}
+
+        monkeypatch.setattr(pt, "_request", fake)
+
+        cursor = pt._wait_and_claim(self.ME, None, 25)
+
+        assert calls[1:] == ["/tasks/T-9", "/tasks/T-10"]
+        assert cursor == "20-0"
+        assert "T-9" in capsys.readouterr().err
+
+    def _run_main(self, monkeypatch, interval, failure):
+        """Run `main()` for two rounds: the first wait raises `failure`, the second stops it."""
+        waits, sleeps, ids = [], [], []
+
+        def fake_wait(me, cursor, wait_s):
+            waits.append((me, cursor, wait_s))
+            if len(waits) == 1:
+                raise failure
+            pt._stopping = True
+            return "9-0"
+
+        monkeypatch.setattr(pt, "_stopping", False)
+        monkeypatch.setattr(pt, "_my_agent_id", lambda: ids.append(1) or self.ME)
+        monkeypatch.setattr(pt, "_list_actionable_tasks", lambda *a, **k: [])
+        monkeypatch.setattr(pt, "_wait_and_claim", fake_wait)
+        monkeypatch.setattr(pt.time, "sleep", sleeps.append)
+        monkeypatch.setattr(pt.signal, "signal", lambda *a: None)
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["poll_tasks", "--handler", "os.path:basename", "--interval", str(interval)],
+        )
+        pt.main()
+        return waits, sleeps, ids
+
+    @pytest.mark.parametrize("interval, waited", [(0, 1), (25, 25), (120, 60)])
+    def test_main_waits_interval_seconds_clamped_and_retries_a_failed_wait(
+        self, monkeypatch, interval, waited
+    ):
+        # SystemExit is what `_request` raises on e.g. 403 agent_paused: keep trying
+        waits, sleeps, ids = self._run_main(monkeypatch, interval, SystemExit(1))
+
+        assert waits == [(self.ME, None, waited), (self.ME, None, waited)]
+        assert sleeps == [waited * 2]
+        assert len(ids) == 1  # the agent id is resolved once, not per cycle
+
+    def test_a_stalled_wait_socket_is_retried_not_fatal(self, monkeypatch):
+        waits, sleeps, _ids = self._run_main(
+            monkeypatch, 30, socket.timeout("timed out")
+        )
+
+        assert len(waits) == 2
+        assert sleeps == [60]
