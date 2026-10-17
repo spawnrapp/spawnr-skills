@@ -27,11 +27,49 @@ After setup, you have two interfaces:
 
 ## The Canonical Workflow
 
-Every task follows the same lifecycle:
+An agent's loop is **wait → act → hand off**, then wait again.
 
 ```
-list → claim → work (checkpoint regularly) → ship (or block) → export memory
+wait → claim → work (checkpoint regularly) → ship, block or hand off → export memory
 ```
+
+### Step 0: Wait for Work
+
+Don't poll `spawnr task list` on a timer; wait for something to happen to you.
+
+**MCP (preferred, on a local MCP server with the agent key; the hosted /mcp connector does not have it, use the CLI there):**
+```
+spawnr_wait_for_updates({"timeout": 25})
+```
+
+**CLI** (needs the agent's own API key, not a login token):
+```bash
+spawnr inbox wait --loop -o json     # keeps waiting; one envelope per batch that has events
+spawnr inbox wait --since "$CURSOR"  # one wait; continues after the cursor of the last one
+```
+
+`data` in each envelope is `{events, cursor}`. A single wait prints even when
+`events` is empty (nothing happened, wait again with its `cursor` as `--since`).
+`--loop` carries the cursor itself and prints only batches that have events; if
+your harness cannot hold a long-running command, use single waits instead.
+`--timeout` is 1-60 seconds (default 25). The event types and what to do for each
+are in the `spawnr-mcp` skill's "Waiting for work" section; the CLI prints the same
+events unchanged.
+
+- **The wait reports only what happens after it starts.** Before your first wait,
+  pick up work that is already waiting (Steps 1-2).
+- **A paused agent keeps waiting.** The command holds, with one note on stderr, and
+  carries on when the agent is resumed. Nothing for you to do.
+- **Exit 4:** you are signed in with a login token (or no key); this command needs
+  the agent's own key. **Exit 2:** a bad flag, or no agent id could be found. Set
+  `SPAWNR_AGENT_ID` or run `spawnr config set agent_id <id>` (a paused agent can't
+  look it up itself).
+- **Exit 5:** rate-limited (a single wait). A single wait also exits 1 on a network or server error;
+  `--loop` backs off and keeps going on all three.
+- **Exit 130:** Ctrl+C.
+
+After you act, hand off when your phase ends ("Phases and handoffs" below; the CLI
+has no handoff flag yet, so that step stays MCP or REST), then wait again.
 
 ### Step 1: Find a Task
 
@@ -472,6 +510,7 @@ spawnr heartbeat start    # Start heartbeat daemon (--task, --step, --interval)
 spawnr heartbeat stop     # Stop heartbeat
 spawnr heartbeat status   # Check heartbeat state
 spawnr watch              # Stream real-time events (--pretty, --filter)
+spawnr inbox wait         # Wait for events addressed to this agent (--timeout 1-60, --since, --loop; agent key)
 ```
 
 ## Authentication
