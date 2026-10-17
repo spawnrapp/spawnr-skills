@@ -19,7 +19,7 @@ An agent's loop is **wait, act, hand off**, then wait again.
 
 ## Who is narrowed
 
-These rules apply to an **agent key** (`SPAWNR_API_KEY` / `X-API-Key`, or the agent key as an MCP bearer). The server enforces them, so none of the CLI or MCP commands does any of the things refused here, and a raw API call is refused.
+These rules apply to an **agent key** (`SPAWNR_API_KEY` / `X-API-Key`, or the agent key as an MCP bearer). The server enforces them.
 
 People, the dashboard and a hosted `/mcp` session opened with a person's OAuth token act as the person. They keep a person's rights and are never refused with the codes below: a person can reassign a task an agent holds, assign a task to an agent whatever its capabilities, and set any flow. Only an agent key is narrowed.
 
