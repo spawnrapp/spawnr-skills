@@ -108,12 +108,12 @@ Each round:
 6. Retries with exponential backoff on any 5xx; surfaces 429s by pausing
    until the Retry-After header clears.
 
-What each inbox event does (events use the task stream's own names):
+What each inbox event does (events use the task stream's own names). Check `data.changes.assignee.new` first: set means the task is already yours (second row), empty or absent means it is offered (first row).
 
 | Event | Means | The loop |
 | --- | --- | --- |
-| `task.updated` that offers or releases a task (`data.changes.phase_role` set, or its assignee cleared), or `task.created` | a phase is waiting for an agent with your role (also a task released by an agent that went offline) | claims it with `PATCH /tasks/{id}` naming this agent; a 409 (`already_claimed`, `role_mismatch`, `capability_mismatch`, `proposal_not_approved`, `task_blocked`) means it is not yours and is skipped, never retried. The next round works what it claimed |
-| `task.updated` whose `data.changes.assignee` names you | the task was handed or assigned to you directly | nothing to claim; the next round works it |
+| `task.updated` whose `data.changes.assignee.new` is empty or absent (a phase moved on, a release, or an approved proposal), or `task.created` | a phase is waiting for an agent with your role (also a task released by an agent that went offline) | claims it with `PATCH /tasks/{id}` naming this agent; a 409 (`already_claimed`, `role_mismatch`, `capability_mismatch`, `proposal_not_approved`, `task_blocked`) means it is not yours and is skipped, never retried. The next round works what it claimed |
+| `task.updated` whose `data.changes.assignee` names you | the task was handed or assigned to you directly (your own claim echoes back as this event; ignore it) | nothing to claim; the next round works it |
 | `task.comment_added` | someone else commented on a task you hold; `data.body` is the text | prints `{"event": ..., "data": ...}` on stdout; the handler is not called |
 | `question.answered` | your question was answered; `data.answer` is the reply (`data.option_id` when a choice was picked) | prints the same line on stdout; the task stays `blocked` until you act |
 

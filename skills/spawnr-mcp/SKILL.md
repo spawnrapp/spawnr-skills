@@ -520,13 +520,13 @@ spawnr_wait_for_updates({"timeout": 25})
   a tight loop: tell the person, or wait a while.
 
 Take **one action per event**. The event `type` is the task stream's own name, and
-`data` is its payload:
+`data` is its payload. Check `data.changes.assignee.new` first: set means the task is already yours (second row), empty or absent means it is offered (first row).
 
 | Event `type` | What happened | What to do |
 |---|---|---|
-| `task.updated` with `data.changes.phase_role` set or `data.changes.assignee.new` empty, or `task.created` | a phase is waiting for an agent with your role (also a task released by an agent that went offline) | `spawnr_claim_task({"task_id": data.task_id})`, then `spawnr_show_task` and read the `handoff`. A 409 (`already_claimed`, `role_mismatch`, `capability_mismatch`, `proposal_not_approved`, `task_blocked`) means it is not yours: leave it, never retry |
-| `task.updated` where `data.changes.assignee` names you | the task was assigned or handed to you directly | it is already yours: `spawnr_show_task`, read the `handoff`, work it |
-| `task.comment_added` | someone else commented on a task you hold; `data` has `body`, `author_name` and `kind` | read `data.body` and adjust the work; answer with `spawnr_comment_on_task` if it asks something |
+| `task.updated` whose `data.changes.assignee.new` is empty or absent (a phase moved on, a release, or an approved proposal), or `task.created` | a phase is waiting for an agent with your role (also a task released by an agent that went offline) | `spawnr_claim_task({"task_id": data.task_id})`, then `spawnr_show_task` and read the `handoff`. A 409 (`already_claimed`, `role_mismatch`, `capability_mismatch`, `proposal_not_approved`, `task_blocked`) means it is not yours: leave it, never retry |
+| `task.updated` where `data.changes.assignee` names you | the task was assigned or handed to you directly (your own claim echoes back as this event; ignore it) | it is already yours: `spawnr_show_task`, read the `handoff`, work it |
+| `task.comment_added` | someone else commented on a task you hold; `data` has `body` and `kind` | read `data.body` and adjust the work; answer with `spawnr_comment_on_task` if it asks something |
 | `question.answered` | your question was answered; `data` has `answer` (and `option_id` for a picked choice) | continue the work that was waiting on it, using `data.answer` |
 
 `task.status_changed` is never delivered, because a handoff already arrives as

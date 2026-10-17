@@ -48,7 +48,6 @@ import importlib
 import json
 import os
 import signal
-import socket
 import sys
 import time
 import urllib.parse
@@ -1427,6 +1426,7 @@ def _handle_inbox_event(me: str, event: dict) -> None:
       (the inbox only carries its own), so there is nothing to claim; the next listing works it.
     * `task.comment_added` (on a task this agent holds) and `question.answered`: print the
       event as one JSON line for the operator. The handler is not called for them.
+    * once SIGTERM has arrived (`_stopping`) nothing is claimed: the process is about to exit.
     * anything else (`task.status_changed` included, a handoff already sends `task.updated`): ignored.
     """
     kind, data = event.get("type"), event.get("data") or {}
@@ -1438,7 +1438,7 @@ def _handle_inbox_event(me: str, event: dict) -> None:
         return
     task_id = data.get("task_id")
     assigned = ((data.get("changes") or {}).get("assignee") or {}).get("new")
-    if assigned or not task_id:
+    if assigned or not task_id or _stopping:  # no claim once SIGTERM has arrived
         return
     _request(
         "PATCH",
@@ -1558,10 +1558,12 @@ def main() -> None:
 
         try:
             cursor = _wait_and_claim(me, cursor, wait_s)
-        except (SystemExit, socket.timeout):
-            # A hard failure (403 agent_paused, 5xx past the retries) or a stalled socket:
-            # sleep-retry with the same cursor. An offer delivered again is a 409 or an
-            # idempotent claim, so nothing is lost or doubled.
+        except (SystemExit, OSError):
+            # A hard failure (403 agent_paused, 5xx past the retries), a stalled socket, or a
+            # backend that dropped the held long-poll (http.client.RemoteDisconnected, a
+            # ConnectionResetError: urllib wraps only request() errors in URLError, so it
+            # escapes `_request`): sleep-retry with the same cursor. An offer delivered again
+            # is a 409 or an idempotent claim, so nothing is lost or doubled.
             time.sleep(wait_s * 2)
 
 

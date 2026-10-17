@@ -25,6 +25,7 @@ Pydantic model as of this commit:
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import socket
@@ -1087,10 +1088,40 @@ class TestInboxWait:
         assert sleeps == [waited * 2]
         assert len(ids) == 1  # the agent id is resolved once, not per cycle
 
-    def test_a_stalled_wait_socket_is_retried_not_fatal(self, monkeypatch):
-        waits, sleeps, _ids = self._run_main(
-            monkeypatch, 30, socket.timeout("timed out")
-        )
+    @pytest.mark.parametrize(
+        "failure",
+        [
+            socket.timeout("timed out"),
+            # urllib wraps only `request()` errors in URLError, so a backend that drops
+            # the held long-poll (a restart or deploy) escapes `_request` as these:
+            http.client.RemoteDisconnected("Remote end closed connection without response"),
+            ConnectionResetError(),
+        ],
+        ids=["socket-timeout", "remote-disconnected", "connection-reset"],
+    )
+    def test_a_stalled_or_dropped_wait_is_retried_not_fatal(self, monkeypatch, failure):
+        waits, sleeps, _ids = self._run_main(monkeypatch, 30, failure)
 
         assert len(waits) == 2
         assert sleeps == [60]
+
+    def test_nothing_is_claimed_after_a_stop_but_comments_still_print(
+        self, monkeypatch, capsys
+    ):
+        """A SIGTERM that lands while the wait holds the socket must not hand the process
+        a task it is about to abandon; the cursor still moves past the events."""
+        monkeypatch.setattr(pt, "_stopping", False)
+        calls = []
+
+        def fake(method, path, body=None, **kw):
+            calls.append(method)
+            monkeypatch.setattr(pt, "_stopping", True)  # the signal arrived mid-wait
+            return {"events": [self.OFFER_UPDATED, self.COMMENT], "cursor": "20-0"}
+
+        monkeypatch.setattr(pt, "_request", fake)
+
+        cursor = pt._wait_and_claim(self.ME, None, 25)
+
+        assert calls == ["GET"]  # no claim PATCH
+        assert cursor == "20-0"
+        assert json.loads(capsys.readouterr().out)["event"] == "task.comment_added"
