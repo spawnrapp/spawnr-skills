@@ -211,6 +211,59 @@ def test_fail_posts_summary_not_description(monkeypatch):
     assert "outside this agent's scope" in kwargs["error_hints"][404]
 
 
+# ─── US-031.5: handoff on a phase change under an agent flow ────────────────
+
+
+def _handoff_args(**over):
+    base = dict(
+        task_id="SPW-12",
+        to="testing",
+        done="Parser written.",
+        not_done="Error messages.",
+        decisions="Kept the old grammar.",
+        open_questions="None.",
+        for_next="role:tester: run the edge cases.",
+    )
+    return sc.argparse.Namespace(**{**base, **over})
+
+
+def test_handoff_sends_status_and_all_five_fields_in_one_patch(monkeypatch):
+    rec = _Recorder()
+    monkeypatch.setattr(sc, "_request", rec)
+
+    sc.cmd_handoff(_handoff_args())
+
+    assert len(rec.calls) == 1
+    method, path, body, kwargs = rec.calls[0]
+    assert (method, path) == ("PATCH", "/tasks/SPW-12")
+    assert body == {
+        "status": "testing",
+        "handoff": {
+            "done": "Parser written.",
+            "not_done": "Error messages.",
+            "decisions": "Kept the old grammar.",
+            "open_questions": "None.",
+            "for_next": "role:tester: run the edge cases.",
+        },
+    }
+    assert "summary" not in body  # the handoff stands in for it
+    assert "outside this agent's scope" in kwargs["error_hints"][404]
+
+
+@pytest.mark.parametrize(
+    "field", ["done", "not_done", "decisions", "open_questions", "for_next"]
+)
+def test_handoff_rejects_a_blank_field_client_side(monkeypatch, field):
+    rec = _Recorder()
+    monkeypatch.setattr(sc, "_request", rec)
+
+    with pytest.raises(SystemExit) as exc:
+        sc.cmd_handoff(_handoff_args(**{field: "  "}))
+
+    assert exc.value.code == 2
+    assert rec.calls == []  # never made the network call
+
+
 def test_start_body_is_unaffected_by_summary_required(monkeypatch):
     """status=in_progress is not in AGENT_SUMMARY_REQUIRED_STATUSES — this
     call site's body was already correct; confirm it stays that way. It also
@@ -700,3 +753,99 @@ class TestEnsureSummary:
         outcome = calls[-1]
         assert outcome["status"] == "done"
         assert outcome.get("summary"), "outcome PATCH reached the API without a summary"
+
+
+class TestPhasedTasks:
+    """US-031.5: a task the agent holds in an agent-flow phase is not claimed again;
+    the handler runs and ONE PATCH moves it on with the handoff the server requires."""
+
+    FLOW = {
+        "agent_flow": {
+            "phases": [
+                {"status_key": "planning", "role": "role:planner"},
+                {"status_key": "coding", "role": "role:coder"},
+                {"status_key": "testing", "role": "role:tester"},
+            ]
+        }
+    }
+
+    def _run(self, monkeypatch, task, handler):
+        calls = []
+
+        def fake(method, path, body=None, **kw):
+            calls.append((method, path, body))
+            return self.FLOW if method == "GET" else {}
+
+        monkeypatch.setattr(pt, "_request", fake)
+        pt._work_task(task, handler)
+        return calls
+
+    def test_a_held_phase_task_is_listed_whatever_its_status(self, monkeypatch):
+        tasks = [
+            {"id": "A", "status": "coding", "phase_role": "role:coder"},
+            {"id": "B", "status": "coding"},
+            {"id": "C", "status": "open"},
+        ]
+        monkeypatch.setattr(pt, "_request", lambda *a, **k: {"tasks": tasks})
+
+        kept = pt._list_actionable_tasks(None)
+
+        assert [t["id"] for t in kept] == ["A", "C"]
+
+    def test_no_claim_walk_and_the_handler_status_and_handoff_go_in_one_patch(
+        self, monkeypatch
+    ):
+        handoff = {
+            "done": "Built it.",
+            "not_done": "Docs.",
+            "decisions": "SQLite.",
+            "open_questions": "None.",
+            "for_next": "role:tester",
+        }
+        task = {"id": "T-1", "status": "coding", "phase_role": "role:coder"}
+
+        calls = self._run(
+            monkeypatch, task, lambda _t: {"status": "testing", "handoff": handoff}
+        )
+
+        assert calls == [("PATCH", "/tasks/T-1", {"status": "testing", "handoff": handoff})]
+
+    def test_no_status_means_the_next_phase_and_a_fallback_handoff(self, monkeypatch):
+        task = {"id": "T-1", "status": "coding", "phase_role": "role:coder"}
+
+        calls = self._run(monkeypatch, task, lambda _t: {"summary": "Did the work."})
+
+        assert calls[0] == ("GET", "/tasks/T-1", None)
+        method, path, body = calls[1]
+        assert (method, path, body["status"]) == ("PATCH", "/tasks/T-1", "testing")
+        assert body["handoff"] == {
+            "done": "Did the work.",
+            "not_done": "Not reported by the handler.",
+            "decisions": "Not reported by the handler.",
+            "open_questions": "Not reported by the handler.",
+            "for_next": "role:tester",
+        }
+
+    def test_the_last_phase_goes_to_done(self, monkeypatch):
+        task = {"id": "T-1", "status": "testing", "phase_role": "role:tester"}
+
+        calls = self._run(monkeypatch, task, lambda _t: {})
+
+        assert calls[1][2]["status"] == "done"
+
+    def test_a_handler_that_raises_blocks_the_task_with_the_error_in_not_done(
+        self, monkeypatch
+    ):
+        task = {"id": "T-1", "status": "coding", "phase_role": "role:coder"}
+
+        def boom(_t):
+            raise RuntimeError("no network")
+
+        calls = self._run(monkeypatch, task, boom)
+
+        assert len(calls) == 1  # no flow read: the status is already known
+        _m, _p, body = calls[0]
+        assert body["status"] == "blocked"
+        assert body["handoff"]["not_done"] == "Handler raised RuntimeError: no network"
+        assert body["handoff"]["for_next"]  # never blank: the server refuses it
+        assert all(v.strip() for v in body["handoff"].values())

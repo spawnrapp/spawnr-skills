@@ -12,6 +12,8 @@ Usage:
   spawnr_client.py start <task_id>
   spawnr_client.py finish <task_id> --note "..."
   spawnr_client.py fail <task_id> --reason "..."
+  spawnr_client.py handoff <task_id> --to <status> --done "..." --not-done "..."
+      --decisions "..." --open-questions "..." --for-next "..."
   spawnr_client.py ask <task_id> "What should I do about X?"
   spawnr_client.py questions mine
 """
@@ -368,6 +370,38 @@ def cmd_fail(args: argparse.Namespace) -> None:
     )
 
 
+# The five fields of a handoff and the flag each one is passed with (US-031.5, epic 031
+# D5). Under an agent flow a status change that enters, leaves or moves between the
+# flow's phases needs all five, or the server answers 422 handoff_required.
+_HANDOFF_FIELDS = (
+    ("done", "--done"),
+    ("not_done", "--not-done"),
+    ("decisions", "--decisions"),
+    ("open_questions", "--open-questions"),
+    ("for_next", "--for-next"),
+)
+
+
+def cmd_handoff(args: argparse.Namespace) -> None:
+    # One PATCH carries the status and the handoff, which stands in for the summary.
+    # Each field is checked client-side so a blank one is a clear message rather than
+    # a 422 round trip; "None." is the way to say a field does not apply.
+    handoff = {
+        field: _require_within_summary_limit(
+            _require_nonblank(getattr(args, field), flag), flag
+        )
+        for field, flag in _HANDOFF_FIELDS
+    }
+    _print_json(
+        _request(
+            "PATCH",
+            f"/tasks/{args.task_id}",
+            {"status": args.to, "handoff": handoff},
+            error_hints={404: _task_not_visible_hint(args.task_id)},
+        )
+    )
+
+
 def cmd_ask(args: argparse.Namespace) -> None:
     # CreateQuestionRequest (backend/app/api/routes/questions.py) has no
     # `task_id` field and is `extra="forbid"` — the task linkage is
@@ -492,6 +526,16 @@ def main() -> None:
     px.add_argument("task_id")
     px.add_argument("--reason", required=True, help="failure reason (logged)")
     px.set_defaults(func=cmd_fail)
+
+    ph = sub.add_parser(
+        "handoff",
+        help="change a task's phase under an agent flow, with the five-field handoff",
+    )
+    ph.add_argument("task_id")
+    ph.add_argument("--to", required=True, help="the status to move the task to")
+    for field, flag in _HANDOFF_FIELDS:
+        ph.add_argument(flag, required=True, help=f"handoff {field} (write None. if n/a)")
+    ph.set_defaults(func=cmd_handoff)
 
     pa = sub.add_parser("ask")
     pa.add_argument("task_id")

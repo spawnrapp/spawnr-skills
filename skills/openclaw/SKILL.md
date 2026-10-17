@@ -47,6 +47,15 @@ limits, and retry-on-429 behavior so you don't have to reimplement them.
   `in_progress`. Do this the moment you commit to working it, even if
   you haven't produced output yet — the dashboard surfaces in-progress
   work to the org's humans.
+- **Hand a task to the next phase** — when `get <task_id>` shows `agent_flow` and a
+  `phase_role` (the task follows an agent flow and is in a phase), change its status
+  with `spawnr_client.py handoff <task_id> --to <status> --done "..." --not-done "..."
+  --decisions "..." --open-questions "..." --for-next "..."`. All five fields are
+  required and must be non-blank (write `None.` when one does not apply); the
+  handoff stands in for the note. Read the task's `handoff` first: it is the last
+  phase's note. Under a flow, never `start`: it would move the task out of its
+  phase without a handoff (422 `handoff_required`). The handoff releases the task
+  to the next phase's role, so you no longer hold it.
 - **Finish a task** — `spawnr_client.py finish <task_id> --note "..."`
   sets status to `done` and posts the note as a completion comment.
   `--note` is required — the backend rejects a status change to `done`
@@ -81,7 +90,13 @@ background loop, use `scripts/poll_tasks.py`. It:
    caller with no non-empty `summary` (#1130); `description` does not
    satisfy this (it's a different field, and a full replace of the task's
    description, not a note).
-4. Patches the task with the handler's result.
+4. Patches the task with the handler's result. A task you already hold in an
+   agent-flow phase (`phase_role` set) is not claimed again: the handler runs, then
+   ONE patch moves it to the handler's `status` (else the flow's next phase, else
+   `done`) with the handler's `handoff` (a dict of the five fields) or, for a field
+   it left out, "Not reported by the handler.". A handler that raises moves it to
+   `blocked` with the error in `not_done`. Picking up a phase offered to your role
+   is not part of the loop yet; once a task is yours the loop works it.
 5. Retries with exponential backoff on any 5xx; surfaces 429s by pausing
    until the Retry-After header clears.
 
@@ -178,7 +193,22 @@ its `start` does not produce this error.
 
 Roles and areas are `capabilities` such as `role:coder` and `area:backend` that
 only a person can set (an agent key gets 403 `AGENT_NOT_PERMITTED`).
-`spawnr_client.py whoami` prints yours; `role:` is shown but not checked yet.
+`spawnr_client.py whoami` prints yours. `role:` is checked when you claim a task
+waiting in a flow phase (409 `role_mismatch`, below).
+
+A task waiting in an agent-flow phase (`phase_role` set, no assignee) goes to an
+agent with that role. If you PATCH `assignee_id` to yourself, with
+`assignee_type: "agent"`, on one and your `capabilities` do not include
+`phase_role`, the server answers 409 `role_mismatch` with `details.phase_role` (and
+`details.missing`); it is checked before the area, so a wrong `area:` on top is
+still this one code. **Never retry the claim.** Leave that task alone and work
+another, or ask a person to add the role. The wrapper's `start` does not produce
+this error. A claim keeps the task's phase: the `in_progress` status that the
+claim sends does not move it out of the phase.
+
+Changing the phase of a task you hold needs a five-field handoff (422
+`handoff_required`, `details.missing` names the blank ones; `spawnr_client.py handoff`,
+above). You must hold the task (403 `AGENT_NOT_PERMITTED`).
 
 If a task's status is already `done` or `blocked`, don't silently
 reopen it. Surface the state to the user and let them decide.

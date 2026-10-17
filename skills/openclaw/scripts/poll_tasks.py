@@ -15,6 +15,12 @@ If the callable raises, the task is moved toward `blocked` (if its workflow
 has a legal path there) with the exception message, so a crash doesn't leave
 the task silently stuck.
 
+A task the agent holds in an agent-flow phase (`phase_role` set) is not claimed
+again. The handler may return `{"status": "testing", "handoff": {"done": ...,
+"not_done": ..., "decisions": ..., "open_questions": ..., "for_next": ...}}`; with
+no `status` the task moves to the flow's next phase (else `done`), and any handoff
+field left out is filled with "Not reported by the handler.".
+
 Environment variables:
   SPAWNR_API_URL        required
   SPAWNR_API_KEY        required
@@ -42,6 +48,7 @@ _here = os.path.dirname(os.path.abspath(__file__))
 if _here not in sys.path:
     sys.path.insert(0, _here)
 from spawnr_client import (  # noqa: E402
+    _HANDOFF_FIELDS,
     _MAX_TASK_SUMMARY_LEN,
     _TASKS_MINE_SERVER_CAP,
     _request,
@@ -181,7 +188,10 @@ def _list_actionable_tasks(
             "may be more assigned tasks the server never returned.\n"
         )
 
-    actionable = [t for t in tasks if t.get("status") in wanted]
+    # US-031.5: a task this agent holds in an agent-flow phase (`phase_role` set) is its
+    # to work whatever the phase is called, so it is kept even when its status is not a
+    # "not started" one. (Picking up an offered phase waits for the inbox, US-031.6.)
+    actionable = [t for t in tasks if t.get("status") in wanted or t.get("phase_role")]
 
     # #1256: drop dependency-blocked tasks here, BEFORE `_work_task` ever
     # walks `_claim_path` — the one place the `/tasks/mine` payload is read,
@@ -1066,10 +1076,72 @@ def _normalize_outcome(
     return out
 
 
+_NOT_REPORTED = "Not reported by the handler."
+
+
+def _next_phase(task_id: str, current_status: Optional[str]) -> tuple[str, str]:
+    """`(status, role)` of the phase after `current_status` in the task's agent flow, read
+    from `GET /tasks/{id}` `agent_flow.phases`; `("done", "")` when it is the last phase
+    or the flow cannot be read."""
+    flow = (_request("GET", f"/tasks/{task_id}") or {}).get("agent_flow") or {}
+    phases = flow.get("phases") or []
+    keys = [p.get("status_key") for p in phases]
+    if current_status in keys and keys.index(current_status) + 1 < len(phases):
+        following = phases[keys.index(current_status) + 1]
+        return following["status_key"], following.get("role", "")
+    return "done", ""
+
+
+def _work_phased_task(task: dict, handler: Callable[[dict], dict]) -> None:
+    """US-031.5 (epic 031 D5): work a task this agent HOLDS in an agent-flow phase.
+
+    It is already ours, and `start` or a claim walk would move it out of its phase (which
+    needs a handoff), so no claim path runs. The handler runs, then ONE PATCH changes the
+    status and carries the handoff the server requires on a phase change:
+
+    * target status: the handler's `status`, else the next phase of the flow, else `done`;
+    * handoff: the handler's `handoff` (a dict of the five fields), a field it left out
+      or blank filled with "Not reported by the handler."; `done` falls back to the
+      handler's `summary`, and `for_next` to the role of the phase it hands to;
+    * a handler that raises moves the task to `blocked` with the error in `not_done`.
+    """
+    task_id = task.get("id") or task.get("_id")
+    failure = None
+    try:
+        result = handler(task) or {}
+    except Exception as e:  # noqa: BLE001
+        failure = f"Handler raised {type(e).__name__}: {e}"
+        result = {"status": "blocked"}
+
+    target = result.get("status")
+    next_role = ""
+    if not target:
+        target, next_role = _next_phase(task_id, task.get("status"))
+    fallback = {field: _NOT_REPORTED for field, _flag in _HANDOFF_FIELDS}
+    fallback["done"] = (result.get("summary") or "Completed by openclaw handler.").strip()
+    fallback["for_next"] = next_role or (
+        "A person should look at this task." if target == "blocked" else _NOT_REPORTED
+    )
+    if failure:
+        fallback["not_done"] = failure
+    sent = result.get("handoff") or {}
+    handoff = {
+        field: str(sent.get(field) or "").strip() or fallback[field]
+        for field, _flag in _HANDOFF_FIELDS
+    }
+    handoff = {k: v[:_MAX_TASK_SUMMARY_LEN] for k, v in handoff.items()}
+
+    _request("PATCH", f"/tasks/{task_id}", {"status": target, "handoff": handoff})
+    sys.stdout.write(json.dumps({"task_id": task_id, "result": target}) + "\n")
+    sys.stdout.flush()
+
+
 def _work_task(task: dict, handler: Callable[[dict], dict]) -> None:
     task_id = task.get("id") or task.get("_id")
     if not task_id:
         return
+    if task.get("phase_role"):
+        return _work_phased_task(task, handler)
 
     workflow = _get_workflow(task.get("workspace_id"), task.get("type", "task"))
     # #1271: resolve ONCE per task (the workflow document is already in

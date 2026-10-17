@@ -22,6 +22,8 @@ Activate this skill when the user wants to:
 - add work under a task you hold (agent persona: propose a subtask)
 - see which agent flow a task follows, or pick one (`flow`), or read a
   `flow_not_allowed` refusal
+- hand a task to the next phase of its agent flow (`handoff`), or read a
+  `handoff_required` or `role_mismatch` refusal
 
 It assumes the Spawnr MCP server is already connected. If no `spawnr_*` tools are
 available, set it up first (`mcp/README.md`) — do not guess credentials.
@@ -204,8 +206,10 @@ key is narrowed.
 An agent's `capabilities` can carry three reserved prefixes. Names are lowercased,
 like task tags.
 
-- `role:<name>`: what the agent is, for example `role:coder` or `role:tester`. It
-  is shown on the agent, but claiming does **not** check it yet.
+- `role:<name>`: what the agent is, for example `role:coder` or `role:tester`.
+  Claiming checks it only on a task waiting in a flow phase: the task's
+  `phase_role` must be among your capabilities (409 `role_mismatch`, in
+  "Phases and handoffs" below).
 - `area:<name>`: where the agent works, for example `area:backend`.
 - `needs:<name>`: a requirement the agent meets, for example
   `needs:claude-design`.
@@ -414,6 +418,73 @@ is a 409 whatever `flow` says.
 
 An OAuth session acts as the person: it is never refused with `flow_not_allowed`.
 
+## Phases and handoffs (`handoff_required`, `role_mismatch`)
+
+Under an agent flow (section above) each phase is a status owned by a role. A
+status change that **enters, leaves or moves between** the flow's phases is a
+*phase change*, and that includes a move back to an earlier phase and a move out to
+`done`, `blocked` or `canceled`. A task in a phase has `phase_role`, the role of
+that phase. `phase_role` with no assignee means the task is **waiting** for an
+agent with that role (and the task's `area:` and `needs:` tags).
+
+**Start from the pinned handoff.** `spawnr_show_task` returns `agent_flow`,
+`phase_role` and `handoff`: the latest handoff, with the five fields (`done`,
+`not_done`, `decisions`, `open_questions`, `for_next`), `from_status`, `to_status`
+and who wrote it. Read it before you start; it says what the last phase did and
+left. Earlier handoffs stay in the task's comments (`kind: handoff`).
+
+**Find work.** `spawnr_claim_task({})` offers a waiting task only to an agent with
+its role, and skips one whose area you lack. A claim by id keeps the phase: if the
+task is waiting in `testing`, claiming it leaves it in `testing` whatever status
+the tool sends. The `status` in the claim's result is `in_progress` regardless, so
+**it is not authoritative: re-read the task** with `spawnr_show_task`.
+
+**A claim needs the role.** Claiming a waiting task by id without the phase's role
+is a **409** with its own `code`, checked before the area:
+
+```json
+{ "ok": false,
+  "error": {
+    "status_code": 409,
+    "code": "role_mismatch",
+    "detail": {
+      "error": "This task is waiting for role:tester, which this agent does not have. Do not retry the claim: pick another task, or ask a person to add it to this agent.",
+      "code": "role_mismatch",
+      "details": { "phase_role": "role:tester", "missing": ["role:tester"] } } } }
+```
+
+**Do not retry the claim.** Pick another task, or ask a person to add the role to
+your agent (`spawnr_ask_question`). A role you have but an area you lack is still
+`capability_mismatch` (section above). Tell these 409s apart by `error.code`.
+
+**Hand off when your phase ends.** Move the task with `spawnr_update_task_status`
+and a `handoff` object:
+
+```
+spawnr_update_task_status({"task_id": "SPW-12", "status": "testing",
+  "handoff": {"done": "Parser written, 14 tests pass.",
+              "not_done": "Error messages.",
+              "decisions": "Kept the old grammar.",
+              "open_questions": "None.",
+              "for_next": "role:tester: run the edge cases in tests/parser."}})
+```
+
+- A handoff is required on **every** phase change, and it counts as the `summary`
+  (do not also write one). Give all five fields: write `None.` rather than leaving one
+  blank. Name the next role in `for_next`.
+- You must hold the task. Moving a task you do not hold is a **403**
+  `AGENT_NOT_PERMITTED` with `details.required: "a task you hold"`; claim it first.
+- Without a complete handoff the call is a **422** `handoff_required`, nothing is
+  written, and `error.detail.details.missing` lists the blank fields. **Resend
+  the same call with every field filled.**
+- Do not send a `handoff` when the task follows no flow, or on a status change that
+  touches no phase: that is a 422 too. Use `summary` as before.
+- Moving the task **into** a phase releases it: you no longer hold it, and it is
+  offered to the next role. Claim it again only if you carry that role. A move out
+  to `done`, `blocked` or `canceled` leaves you as the assignee.
+- If you go offline holding a task that is in a phase, it is released and offered
+  to the role again; a person sees an "Agent offline" flag until someone claims it.
+
 ## Asking Structural Questions
 
 To raise a question for a human, call **`spawnr_ask_question`** (agent persona,
@@ -446,6 +517,9 @@ weighing the task against. Don't just restate the question in `context_note`
 — say what governing decision it seems to bump into.
 
 ## Handoff convention (Phase 1)
+
+On a task that follows an agent flow, hand off with `spawnr_update_task_status`
+and `handoff` instead (previous section).
 
 To finish a task and pass it on, use **`spawnr_complete_and_reassign`** — one step:
 
