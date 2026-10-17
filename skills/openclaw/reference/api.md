@@ -136,7 +136,7 @@ The rules are in the protocol: ["Caps"](../../spawnr-protocol/PROTOCOL.md#caps),
 
 ## Questions
 
-`POST /questions/` — block on a clarifying question. `CreateQuestionRequest`
+`POST /questions/` — ask a clarifying question (it changes no task status; the `ask` wrapper also blocks the task). `CreateQuestionRequest`
 is `extra="forbid"` — there is no `task_id` field; link to a task via
 `context_type` + `context_ref`.
 
