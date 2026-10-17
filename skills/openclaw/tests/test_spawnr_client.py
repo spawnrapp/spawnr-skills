@@ -804,12 +804,12 @@ class TestPhasedTasks:
         }
     }
 
-    def _run(self, monkeypatch, task, handler):
+    def _run(self, monkeypatch, task, handler, detail=None):
         calls = []
 
         def fake(method, path, body=None, **kw):
             calls.append((method, path, body))
-            return self.FLOW if method == "GET" else {}
+            return (detail or self.FLOW) if method == "GET" else {}
 
         monkeypatch.setattr(pt, "_request", fake)
         pt._work_task(task, handler)
@@ -843,7 +843,10 @@ class TestPhasedTasks:
             monkeypatch, task, lambda _t: {"status": "testing", "handoff": handoff}
         )
 
-        assert calls == [("PATCH", "/tasks/T-1", {"status": "testing", "handoff": handoff})]
+        assert calls == [
+            ("GET", "/tasks/T-1", None),
+            ("PATCH", "/tasks/T-1", {"status": "testing", "handoff": handoff}),
+        ]
 
     def test_no_status_means_the_next_phase_and_a_fallback_handoff(self, monkeypatch):
         task = {"id": "T-1", "status": "coding", "phase_role": "role:coder"}
@@ -878,12 +881,66 @@ class TestPhasedTasks:
 
         calls = self._run(monkeypatch, task, boom)
 
-        assert len(calls) == 1  # no flow read: the status is already known
-        _m, _p, body = calls[0]
+        assert len(calls) == 2  # the detail read, then one PATCH
+        _m, _p, body = calls[1]
         assert body["status"] == "blocked"
         assert body["handoff"]["not_done"] == "Handler raised RuntimeError: no network"
         assert body["handoff"]["for_next"]  # never blank: the server refuses it
         assert all(v.strip() for v in body["handoff"].values())
+
+    def test_the_handler_gets_the_task_detail_with_the_pinned_handoff(self, monkeypatch):
+        """`/tasks/mine` rows carry `phase_role` but not `handoff`: the poller reads the
+        task detail once, so a handler starts from the last phase's handoff."""
+        pinned = {
+            "done": "Parser written.",
+            "not_done": "Error messages.",
+            "decisions": "Kept the old grammar.",
+            "open_questions": "None.",
+            "for_next": "role:tester: run the edge cases.",
+        }
+        row = {"id": "T-1", "status": "testing", "phase_role": "role:tester"}
+        seen = []
+
+        def handler(t):
+            seen.append(t)
+            return {"status": "done", "handoff": pinned}
+
+        calls = self._run(
+            monkeypatch, row, handler, detail={**self.FLOW, "handoff": pinned}
+        )
+
+        assert seen[0]["handoff"] == pinned
+        assert seen[0]["id"] == "T-1"  # the list row's fields survive the merge
+        assert [c[:2] for c in calls] == [("GET", "/tasks/T-1"), ("PATCH", "/tasks/T-1")]
+
+    def test_a_blocked_by_cap_refusal_on_the_handoff_is_not_retried(
+        self, monkeypatch, capsys
+    ):
+        """A status change on a task Spawnr blocked at a cap is 409 `blocked_by_cap`
+        (AgentTaskTracker#2437). It is sent once, reported, and the loop goes on."""
+        methods = []
+        refusal = json.dumps(
+            {
+                "detail": {
+                    "code": "blocked_by_cap",
+                    "details": {"cap": "exchanges", "question_id": "Q-1"},
+                }
+            }
+        ).encode()
+
+        def fake_urlopen(req, timeout=None):
+            methods.append(req.get_method())
+            if req.get_method() == "GET":
+                return _OkResponse(json.dumps(self.FLOW).encode())
+            raise _FakeHTTPError(409, refusal)
+
+        monkeypatch.setattr(sc.urllib.request, "urlopen", fake_urlopen)
+        task = {"id": "T-1", "status": "coding", "phase_role": "role:coder"}
+
+        pt._work_task_safely(task, lambda _t: {"status": "testing"})  # must not raise
+
+        assert methods.count("PATCH") == 1
+        assert "blocked_by_cap" in capsys.readouterr().err
 
 
 class TestInboxWait:
@@ -1071,7 +1128,7 @@ class TestInboxWait:
         assert cursor == "20-0"
         assert "T-9" in capsys.readouterr().err
 
-    def _run_main(self, monkeypatch, interval, failure):
+    def _run_main(self, monkeypatch, seconds, failure, flag="--timeout"):
         """Run `main()` for two rounds: the first wait raises `failure`, the second stops it."""
         waits, sleeps, ids = [], [], []
 
@@ -1091,21 +1148,29 @@ class TestInboxWait:
         monkeypatch.setattr(
             sys,
             "argv",
-            ["poll_tasks", "--handler", "os.path:basename", "--interval", str(interval)],
+            ["poll_tasks", "--handler", "os.path:basename", flag, str(seconds)],
         )
         pt.main()
         return waits, sleeps, ids
 
-    @pytest.mark.parametrize("interval, waited", [(0, 1), (25, 25), (120, 60)])
-    def test_main_waits_interval_seconds_clamped_and_retries_a_failed_wait(
-        self, monkeypatch, interval, waited
+    @pytest.mark.parametrize("seconds, waited", [(0, 1), (25, 25), (120, 60)])
+    def test_main_waits_timeout_seconds_clamped_and_retries_a_failed_wait(
+        self, monkeypatch, seconds, waited
     ):
         # SystemExit is what `_request` raises on e.g. 403 agent_paused: keep trying
-        waits, sleeps, ids = self._run_main(monkeypatch, interval, SystemExit(1))
+        waits, sleeps, ids = self._run_main(monkeypatch, seconds, SystemExit(1))
 
         assert waits == [(self.ME, None, waited), (self.ME, None, waited)]
         assert sleeps == [waited * 2]
         assert len(ids) == 1  # the agent id is resolved once, not per cycle
+
+    def test_the_old_interval_flag_still_sets_the_wait(self, monkeypatch):
+        """The in-app OpenClaw docs card still sends `--interval`: it is an alias."""
+        waits, _sleeps, _ids = self._run_main(
+            monkeypatch, 25, SystemExit(1), flag="--interval"
+        )
+
+        assert waits[0][2] == 25
 
     @pytest.mark.parametrize(
         "failure",
