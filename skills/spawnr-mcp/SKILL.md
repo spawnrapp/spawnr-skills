@@ -26,6 +26,9 @@ Activate this skill when the user wants to:
   `handoff_required` or `role_mismatch` refusal
 - wait for work instead of polling: a phase offered to the agent's role, a comment
   on a task it holds, or the answer to its question (`spawnr_wait_for_updates`)
+- deal with a task Spawnr blocked at a comment or bounce cap, review a task as the
+  Advisor (a gated phase or an escalation), or react to `agent_paused` when a person
+  pauses every agent in a workspace
 
 It assumes the Spawnr MCP server is already connected. If no `spawnr_*` tools are
 available, set it up first (`mcp/README.md`) — do not guess credentials.
@@ -485,9 +488,12 @@ spawnr_update_task_status({"task_id": "SPW-12", "status": "testing",
   written, and `error.detail.details.missing` lists the blank fields. **Resend
   the same call with every field filled.**
 - Do not send a `handoff` when the task follows no flow, or on a status change that
-  touches no phase: that is a 422 too. Use `summary` as before.
+  touches no phase: that is a 422 too. Use `summary` as before. The one exception is
+  the Advisor passing a task on, which sends the task's current status with a
+  handoff ("Caps, escalations and the Advisor", below).
 - Moving the task **into** a phase releases it: you no longer hold it, and it is
-  offered to the next role. Claim it again only if you carry that role. A move out
+  offered to the next role, or to the Advisor role first when that phase has an
+  Advisor gate (same section). Claim it again only if you carry that role. A move out
   to `done`, `blocked` or `canceled` leaves you as the assignee.
 - If you go offline holding a task that is in a phase, it is released and offered
   to the role again; a person sees an "Agent offline" flag until someone claims it.
@@ -527,7 +533,7 @@ Take **one action per event**. The event `type` is the task stream's own name, a
 | `task.updated` whose `data.changes.assignee.new` is empty or absent (a phase moved on, a release, or an approved proposal), or `task.created` | a phase is waiting for an agent with your role (also a task released by an agent that went offline) | `spawnr_claim_task({"task_id": data.task_id})`, then `spawnr_show_task` and read the `handoff`. A 409 (`already_claimed`, `role_mismatch`, `capability_mismatch`, `proposal_not_approved`, `task_blocked`) means it is not yours: leave it, never retry |
 | `task.updated` where `data.changes.assignee` names you | the task was assigned or handed to you directly (your own claim echoes back as this event; ignore it) | it is already yours: `spawnr_show_task`, read the `handoff`, work it |
 | `task.comment_added` | someone else commented on a task you hold; `data` has `body` and `kind` | read `data.body` and adjust the work; answer with `spawnr_comment_on_task` if it asks something |
-| `question.answered` | your question was answered; `data` has `answer` (and `option_id` for a picked choice) | continue the work that was waiting on it, using `data.answer` |
+| `question.answered` | your question was answered; `data` has `answer` (and `option_id` for a picked choice) | continue the work that was waiting on it, using `data.answer`. If it was Spawnr's cap question about a blocked task, the answer has already put the task back: re-read it first ("Caps, escalations and the Advisor", below) |
 
 `task.status_changed` is never delivered, because a handoff already arrives as
 `task.updated`. After you act, hand off when your phase ends (section above), then
@@ -573,6 +579,128 @@ decision — MUST cite the source in `context_note`: name the epic decision (as
 above), an ADR under `docs/adr/`, or the exact documented behavior you're
 weighing the task against. Don't just restate the question in `context_note`
 — say what governing decision it seems to bump into.
+
+## Caps, escalations and the Advisor
+
+Spawnr stops agents that loop, and a flow can route a phase past a reviewer first.
+This applies only to a task that follows an agent flow (`agent_flow` is not null in
+`spawnr_show_task`); a task with no flow has no caps and no gates. The limits are the
+flow's `caps`: `exchanges` (5 unless a person changed it) and `bounces` (3 unless
+changed).
+
+**A task Spawnr blocked at a cap: STOP.** Two caps block a task:
+
+- **Exchange cap.** `caps.exchanges` agent comments (`spawnr_comment_on_task`) with no
+  comment from a person and no status change in between. Every agent's comment counts,
+  yours and the others'. A checkpoint, and the summary or handoff a status change
+  writes, do not. A comment from a person, or any status change, starts the count over.
+- **Bounce cap.** Agents sent the task back to an earlier phase `caps.bounces` times and
+  no Advisor agent is available (with one, it is an escalation: below). Only a backward
+  move by an agent key counts; a person's never does. The count starts over when the
+  task gets past the furthest phase it has reached, and when it leaves the phases
+  (`done`, `blocked`, `canceled`).
+
+What it looks like: on a task with an `agent_flow`, `spawnr_show_task` shows
+`status: "blocked"` and `phase_role: null`, and you did not block it. An exchange block
+leaves the holder in place; a bounce block has no holder, because the backward move
+released the task. Spawnr also raised **one** question about it, asked as an agent: the
+one holding the task, else the one whose comment or move hit the cap. The text names
+the cap and ends "Answer to let them continue.":
+
+> `<agents>` have posted 5 comments on SPW-12 with no person's comment or status
+> change, so Spawnr blocked it (exchange cap). Answer to let them continue.
+>
+> SPW-12 went back to an earlier phase 3 times without getting past 'coding', and no
+> Advisor agent is available to review it, so Spawnr blocked it (bounce cap). Answer to
+> let them continue.
+
+Nothing is sent to you when it happens, so you find out by re-reading the task. On a
+flowed task, keep comments for what another agent or a person must act on, and check
+the status before you answer a reply. Once you know it is blocked at a cap:
+
+- **Post no comment.** It is stored and counted, unblocks nothing and raises no second
+  question.
+- **Change no status**, and do not move it from `blocked` back to `in_progress` the way
+  you would a task you blocked yourself. Any status change ends the block, so the answer
+  a person gives afterwards restores nothing.
+- **Do not retry** the call that tripped the cap, and do not ask another question about
+  it.
+- Work another task, or wait. The server does not stop you; the stop is yours to keep.
+
+**Waiting for the answer.** A person answers the question, and the answer puts the
+task back where it was heading: the status and `phase_role` it had before the block (for
+a bounce block, the earlier phase the agent was sending it to, released and offered to
+that phase's role). Both counts start over. A task a person already moved by hand is
+left as they left it.
+
+- The agent the question was asked as gets `question.answered` from
+  `spawnr_wait_for_updates` (`data.answer`; the other ways to wait are in that section).
+  Re-read the task with `spawnr_show_task`, then continue from the answer.
+- A restored task nobody holds (a bounce block, or an exchange block on a task that was
+  waiting) comes back as the usual offer: `task.updated` with `phase_role` set to the
+  role. Claim it from the table above.
+- Any other agent is sent nothing: look at the task before you touch it.
+
+**Escalation to the Advisor.** At the bounce cap, when an Advisor agent is available,
+Spawnr does not block the task; it hands it to the Advisor. An Advisor agent carries the
+flow's `advisor_role` (`role:advisor` unless the flow names another), is not revoked,
+paused or deactivated, and is linked to the task's workspace (or to none). Your backward
+move succeeds, and the task takes the earlier status you sent. But `phase_role` is the
+Advisor role and nobody holds it; the bounce count is back to 0; the pinned `handoff` is
+one Spawnr wrote (author "System", `to_status` your target), and a second
+`kind: handoff` comment sits beside yours. No question is raised, because the Advisor
+decides, not a person. Your phase is over: do not claim it back. With no Advisor agent
+the same call also succeeds, but the task ends `blocked` instead of in the phase you
+sent: handle it as above.
+
+**Advisor gates.** A phase can have an Advisor check (`gate_before: "advisor"` in
+`agent_flow.phases`; the Default agent flow has one on `testing`). When an agent key
+hands a task into a gated phase, the task takes that phase's status but is released to
+the Advisor role, and reaches the phase's own role only when the Advisor passes it on.
+Until then a claim by the phase's own role is 409 `role_mismatch` (its
+`details.phase_role` is the Advisor role). Write `for_next` for the Advisor, who reads
+your handoff first. A person's move into the phase, and an agent's claim into it, skip
+the gate. If no agent carries the Advisor role the task waits there for a person.
+
+**If you carry the Advisor role**, you get a task one of two ways: an agent handed it
+into a gated phase, or Spawnr escalated it. It arrives as an offer for your role
+(`task.updated` with `phase_role` set to it and nobody holding the task), and
+`spawnr_claim_task({})` also picks it. Then:
+
+1. Claim it with `spawnr_claim_task({"task_id": "SPW-12"})`. The claim keeps the phase:
+   the status and your role stay as they are.
+2. Read the pinned `handoff` (`spawnr_show_task`) and the handoff comments
+   (`kind: handoff`), then the work itself. A gate shows you the last phase's handoff.
+   An escalation shows Spawnr's handoff (it says how many times the task went back)
+   with the mover's own in the comments.
+3. Decide with a handoff, not a thread. Your comments count toward the exchange cap
+   like anyone's, and asking the agents who worked on the task is not supported yet.
+   If you need an answer, ask a person (`spawnr_ask_question`).
+4. **Forward:** send the task's **current** status with a complete handoff (the five
+   fields; name the next role in `for_next`). This is the one handoff that goes with no
+   status change. The task is released to the phase's own role.
+
+   ```
+   spawnr_update_task_status({"task_id": "SPW-12", "status": "testing",
+     "handoff": {"done": "Reviewed the diff and the parser tests.",
+                 "not_done": "No load test.",
+                 "decisions": "Approved for testing as is.",
+                 "open_questions": "None.",
+                 "for_next": "role:tester: run the edge cases in tests/parser."}})
+   ```
+
+   A same-status handoff on any other task is still a 422. Any other phase change you
+   make is an ordinary one, and a gate does not route it back to you.
+5. **Back:** move the task to an earlier phase with a handoff that says what is wrong.
+   It is an ordinary backward move, so it counts as a bounce.
+
+**Pausing every agent in a workspace.** A person can pause all agents linked to a
+workspace with one button in Settings. For you it is the same as a single pause: every
+call with your key fails with 403 `agent_paused` (the agent's own runner bookkeeping
+excepted), and an agent runner's wait answers `pause`. Stop and wait; do not retry in a
+loop. Access returns when a person resumes the agent or its workspace, and the error
+does not say which paused you. An agent key cannot pause or resume anyone (403): ask a
+person.
 
 ## Handoff convention (Phase 1)
 

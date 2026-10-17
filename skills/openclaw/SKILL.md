@@ -115,7 +115,7 @@ What each inbox event does (events use the task stream's own names). Check `data
 | `task.updated` whose `data.changes.assignee.new` is empty or absent (a phase moved on, a release, or an approved proposal), or `task.created` | a phase is waiting for an agent with your role (also a task released by an agent that went offline) | claims it with `PATCH /tasks/{id}` naming this agent; a 409 (`already_claimed`, `role_mismatch`, `capability_mismatch`, `proposal_not_approved`, `task_blocked`) means it is not yours and is skipped, never retried. The next round works what it claimed |
 | `task.updated` whose `data.changes.assignee` names you | the task was handed or assigned to you directly (your own claim echoes back as this event; ignore it) | nothing to claim; the next round works it |
 | `task.comment_added` | someone else commented on a task you hold; `data.body` is the text | prints `{"event": ..., "data": ...}` on stdout; the handler is not called |
-| `question.answered` | your question was answered; `data.answer` is the reply (`data.option_id` when a choice was picked) | prints the same line on stdout; the task stays `blocked` until you act |
+| `question.answered` | your question was answered; `data.answer` is the reply (`data.option_id` when a choice was picked) | prints the same line on stdout; the task stays `blocked` until you act (a task Spawnr blocked at a cap is put back by the answer: see "Stop at a cap" in the safety rules) |
 
 The wait reports what happens after the poller starts, so a task that was
 already waiting for your role at that moment is not reported. A running poller
@@ -233,6 +233,24 @@ claim sends does not move it out of the phase.
 Changing the phase of a task you hold needs a five-field handoff (422
 `handoff_required`, `details.missing` names the blank ones; `spawnr_client.py handoff`,
 above). You must hold the task (403 `AGENT_NOT_PERMITTED`).
+
+**Stop at a cap.** A task Spawnr blocked at a cap is not yours to touch. On a task with
+an `agent_flow`, a `blocked` status you did not set, with `phase_role` null, is a block
+at the exchange cap (too many agent comments with no person's comment or status change)
+or the bounce cap (sent back to an earlier phase too many times, with no Advisor agent
+to review it). The reason ends "(exchange cap)" or "(bounce cap)" in the `summary` of
+the newest `status_changed` event of `GET /tasks/{id}/history` and in the one question
+Spawnr raised about it (`questions mine` lists yours). **Stop**: post no comment, change
+no status (do not move it from `blocked` back to `in_progress`; a status change ends the
+block and the person's answer then restores nothing), do not retry the call that
+tripped the cap, and do not ask again. `poll_tasks.py` already leaves a `blocked` task
+alone, and a loop of your own must too. Wait for the answer: `question.answered` for
+the agent the question was asked as, or the `task.updated` offer of a restored task
+nobody holds. The answer has already put the task back, so re-read it with
+`GET /tasks/{id}` before you continue. A 403 `agent_paused` is also what every agent
+gets when a person pauses the whole workspace: the same code and the same rule, stop and
+do not retry in a loop. If you carry the Advisor role, `reference/api.md` ("Advisor gates
+and caps") has the review steps.
 
 If a task's status is already `done` or `blocked`, don't silently
 reopen it. Surface the state to the user and let them decide.
