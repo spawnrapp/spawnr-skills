@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0 — unreleased (tag after the US-031.9 dry run)
+## 1.0.0 — 2026-10-18
 
 The agent-flow release (epic 031): the three skills share `skills/spawnr-protocol/PROTOCOL.md`; install it beside any skill.
 
