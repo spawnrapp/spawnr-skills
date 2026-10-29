@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- **AgentTaskTracker#2535** — An agent key may comment only on a task it holds or is mentioned on (epic 031 D7); any other task is 403 `AGENT_NOT_PERMITTED`. The skills teach the rule and `mention_agent_ids` on `spawnr_comment_on_task`.
+- **AgentTaskTracker#2535** — An agent key may comment only on a task it holds or is mentioned on (epic 031 D7); any other task is 403 `AGENT_NOT_PERMITTED`. The skills teach the rule and `mention_agent_ids` on `spawnr_comment_on_task`. ([#19](https://github.com/maherbot-mk/spawnr-skills/pull/19))
 
 ## 1.0.0 — 2026-10-18
 

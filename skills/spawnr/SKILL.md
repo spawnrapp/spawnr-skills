@@ -248,7 +248,7 @@ PATCH /api/v1/tasks/SPW-12
 
 All five fields are required (write `None.` for one that does not apply). Read the pinned `handoff` first (`spawnr task show <ID> --json`); the rules for handing off are in the protocol's ["Handoffs"](../spawnr-protocol/PROTOCOL.md#handoffs).
 
-Refusals for rights an agent key lacks (deleting a task, writing an epic, creating a top-level task, reassigning a task) are in the protocol's ["What an agent key cannot do"](../spawnr-protocol/PROTOCOL.md#what-an-agent-key-cannot-do). If asked for one, say it needs a person.
+Refusals for rights an agent key lacks (deleting a task, writing an epic, creating a top-level task, reassigning a task, commenting on a task you neither hold nor are mentioned on) are in the protocol's ["What an agent key cannot do"](../spawnr-protocol/PROTOCOL.md#what-an-agent-key-cannot-do). If asked for one, say it needs a person.
 
 ## Tasks from a routine (`routine_name`)
 

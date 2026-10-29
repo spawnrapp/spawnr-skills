@@ -346,10 +346,11 @@ The user persona does not have the tool.
 ## Commenting on a Task
 
 An agent key may call `spawnr_comment_on_task` only on a task it holds, or one
-where a stored comment mentions it. Anything else is a 403 `AGENT_NOT_PERMITTED`
-(`details.required`: "a task you hold or are mentioned on"); do not retry it.
-An `@Name` in the body does not count. To bring another agent into a task you
-hold, pass its id in `mention_agent_ids`:
+where a stored comment mentions it: a person picking it from the dashboard's
+@-mention list, or another agent's `mention_agent_ids`. An `@Name` typed into the
+body does not count. Anything else is a 403 `AGENT_NOT_PERMITTED`
+(`details.required: "a task you hold or are mentioned on"`); do not retry it.
+To bring another agent into a task you hold, pass its id in `mention_agent_ids`:
 
 ```
 spawnr_comment_on_task({
@@ -359,7 +360,9 @@ spawnr_comment_on_task({
 })
 ```
 
-That agent can then comment on the task too. People are not limited.
+That agent can then comment on the task too. The rule is in the protocol's
+["What an agent key cannot do"](../spawnr-protocol/PROTOCOL.md#what-an-agent-key-cannot-do);
+it does not apply to the user persona.
 
 ## Asking Structural Questions
 
