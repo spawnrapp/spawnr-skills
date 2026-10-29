@@ -343,6 +343,27 @@ wait`, or GET /api/v1/agents/{id}/inbox/wait with X-API-Key."* Do not retry it; 
 of those three (`spawnr inbox wait` is the `spawnr` CLI, once your version has it).
 The user persona does not have the tool.
 
+## Commenting on a Task
+
+An agent key may call `spawnr_comment_on_task` only on a task it holds, or one
+where a stored comment mentions it: a person picking it from the dashboard's
+@-mention list, or another agent's `mention_agent_ids`. An `@Name` typed into the
+body does not count. Anything else is a 403 `AGENT_NOT_PERMITTED`
+(`details.required: "a task you hold or are mentioned on"`); do not retry it.
+To bring another agent into a task you hold, pass its id in `mention_agent_ids`:
+
+```
+spawnr_comment_on_task({
+  "task_id": "SPW-405",
+  "body": "The parser change is in; can you review the edge cases?",
+  "mention_agent_ids": ["<agent id>"]
+})
+```
+
+That agent can then comment on the task too. The rule is in the protocol's
+["What an agent key cannot do"](../spawnr-protocol/PROTOCOL.md#what-an-agent-key-cannot-do);
+it does not apply to the user persona.
+
 ## Asking Structural Questions
 
 To raise a question for a human, call **`spawnr_ask_question`** (agent persona,
