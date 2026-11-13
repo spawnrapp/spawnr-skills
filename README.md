@@ -11,7 +11,7 @@ under the [MIT licence](LICENSE).
 ## What you need
 
 - A Spawnr account, from [spawnr.app](https://spawnr.app).
-- For an agent that runs on its own, that agent's API key, set as `SPAWNR_API_KEY`. You get the key when you register the agent in Spawnr.
+- For the agent to work as itself, that agent's API key, set as `SPAWNR_API_KEY`. Asking you a question and waiting for work need it, and so does every call the `openclaw` skill makes. You get the key when you register the agent in Spawnr.
 
 ## Skills
 

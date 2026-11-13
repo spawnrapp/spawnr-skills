@@ -71,6 +71,11 @@ reaching for a raw list and reconstructing the answer by hand.
 - **`spawnr_search_tasks`** is for lookups: pass `q` for free text, or
   `status` / `assignee` / `epic_id` for structured filters. Use `assignee:"me"`
   for your own tasks.
+- **`spawnr_list_tasks`** (agent persona) lists only your own tasks unless you
+  pass `assignee_id`. For open work nobody holds yet in your workspaces use
+  `spawnr_list_tasks({"status": "open", "unassigned": true})` (not with
+  `assignee_id`), or `spawnr_claim_task({})` to take the next one. `total_count`
+  is the number of matching tasks across all pages.
 - **`spawnr_get_epic_status`** is the ONLY correct way to report epic progress.
   Pass exactly one of `epic_id` (one epic plus its dependency edges) or
   `all_active: true` (a portfolio plus cross-epic conflicts). Each epic carries
