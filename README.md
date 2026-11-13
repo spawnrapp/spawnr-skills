@@ -1,24 +1,37 @@
 # spawnr-skills
 
-Installable agent skills for [Spawnr](https://spawnr.co). They moved here
+Installable agent skills for [Spawnr](https://spawnr.app). They moved here
 from `maherbot-mk/AgentTaskTracker` (`skills/`, at `3bcb6cb5`) with only the
 lines that say where they live updated, and this repo is now the only copy:
 change them here.
 
 | Skill | What it is for |
 |---|---|
-| [`skills/spawnr`](skills/spawnr/SKILL.md) | The CLI skill: manage Spawnr tasks from any agent session with the `spawnr` command (claim, status, ship). Includes `setup.sh`, which installs the CLI and the MCP server. |
+| [`skills/spawnr`](skills/spawnr/SKILL.md) | The CLI skill: manage Spawnr tasks from any agent session with the `spawnr` command (claim, status, ship). Includes `setup.sh`, which installs the CLI from PyPI. |
 | [`skills/spawnr-mcp`](skills/spawnr-mcp/SKILL.md) | MCP etiquette: which `spawnr_*` tool answers which question, how to handle confirm-relay writes, how to hand off a task, and how to wait for work. |
-| [`skills/spawnr-protocol`](skills/spawnr-protocol/PROTOCOL.md) | The rules all three skills share (not a skill itself): claiming, roles and areas, flows and handoffs, the wait loop, proposals, caps, the Advisor playbook, pause, and every refusal code with what to do. Copy it beside whichever skill you install. |
+| [`skills/spawnr-protocol`](skills/spawnr-protocol/SKILL.md) | The rules the other three skills share: claiming, roles and areas, flows and handoffs, the wait loop, proposals, caps, the Advisor playbook, pause, and every refusal code with what to do. They link to its [`PROTOCOL.md`](skills/spawnr-protocol/PROTOCOL.md), so install it beside whichever skill you use. |
 | [`skills/openclaw`](skills/openclaw/SKILL.md) | The skill for a registered Claude-based agent (Claude Code or the Agent SDK): list and pick up tasks, move statuses, ask questions, and run a wait loop on the agent's inbox. Ships `scripts/spawnr_client.py` and `scripts/poll_tasks.py`. |
 
 ## Install
 
-This repo is private. Clone it with a GitHub account that has access to
-`spawnrapp/spawnr-skills`:
+With the [`skills` CLI](https://github.com/vercel-labs/skills), from your project folder:
 
 ```bash
-git clone git@github.com:spawnrapp/spawnr-skills.git
+npx skills add spawnrapp/spawnr-skills
+```
+
+- `--list` shows the skills in this repo and installs nothing.
+- `--skill <name>` installs only that skill; repeat it for more. Always include `spawnr-protocol`: every skill links to `../spawnr-protocol/PROTOCOL.md` for the rules, so `--skill spawnr` alone leaves that link dead.
+- `-a <agent>` names the agent to install for (repeat it for more), `--copy` copies the files instead of symlinking them, and `-y` skips the confirmation prompts.
+
+```bash
+npx skills add spawnrapp/spawnr-skills --skill spawnr --skill spawnr-protocol -a claude-code -a codex -y
+```
+
+Or by hand. Clone the repo:
+
+```bash
+git clone https://github.com/spawnrapp/spawnr-skills.git
 ```
 
 Then copy the skills you want into your host's skills folder. Each line starts
@@ -33,22 +46,32 @@ of `x` in place instead of the folder.
 
 ### `skills/spawnr/setup.sh`
 
-`setup.sh` installs the Spawnr CLI and MCP server, writes the MCP config to
-`~/.config/claude/mcp_settings.json` and starts `spawnr login` unless
-`~/.spawnr/config.toml` already exists. Those packages
-are not on PyPI yet, so it installs them from local checkouts:
+The `spawnr` skill drives the Spawnr CLI, the `spawnr` package on PyPI.
+`setup.sh` installs it with the first of `pipx`, `uv` and `pip` it finds, then
+starts `spawnr login` unless `~/.spawnr/config.toml` already exists:
 
-| Variable | Required | Meaning |
-|---|---|---|
-| `SPAWNR_LOCAL_DEV` | yes | Path to your `AgentTaskTracker` monorepo checkout. `mcp/` and `sdks/python-core/` are installed from it. |
-| `SPAWNR_CLI_LOCAL_DEV` | no | Path to your `spawnr-cli` checkout. Defaults to `$SPAWNR_LOCAL_DEV/../spawnr-cli`. |
+```bash
+bash skills/spawnr/setup.sh            # from a clone of this repo
+bash .claude/skills/spawnr/setup.sh    # after `npx skills add` into a Claude Code project
+```
+
+By hand, that is `pipx install spawnr`, then `spawnr login`.
+
+`setup.sh` does not install or configure the MCP server: its packages
+(`spawnr-mcp` and `spawnr-core`) are published at launch.
+
+To work on Spawnr itself, set `SPAWNR_LOCAL_DEV`. `setup.sh` then installs
+editable source checkouts instead, the MCP server included, and writes the MCP
+config to `~/.config/claude/mcp_settings.json`:
+
+| Variable | Meaning |
+|---|---|
+| `SPAWNR_LOCAL_DEV` | Path to your `AgentTaskTracker` monorepo checkout. `mcp/` and `sdks/python-core/` are installed from it. |
+| `SPAWNR_CLI_LOCAL_DEV` | Path to your `spawnr-cli` checkout. Defaults to `$SPAWNR_LOCAL_DEV/../spawnr-cli`. |
 
 ```bash
 SPAWNR_LOCAL_DEV=/path/to/AgentTaskTracker bash skills/spawnr/setup.sh
 ```
-
-With `SPAWNR_LOCAL_DEV` unset, `setup.sh` exits with an error and installs
-nothing.
 
 ## Tests
 
