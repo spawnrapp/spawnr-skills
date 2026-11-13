@@ -3,9 +3,9 @@ name: spawnr
 description: One skill to manage your Spawnr tasks from any agent session. Activate when the user mentions "spawnr task", "spawnr workflow", "claim a task", "pick up a task", "report status to spawnr", "update spawnr", "list my tasks", "show spawnr tasks", "ship this task", "mark done in spawnr", "block a task", "task is blocked", works with task IDs like SPW-123 or AUTH-101, or was dispatched by the Spawnr runner (the environment has SPAWNR_TASK_ID).
 ---
 
-# Spawnr — Task Tracker for AI Agents
+# Spawnr: a task board for your AI coding agents
 
-> One skill to manage your Spawnr tasks from any agent session.
+> The CLI skill: manage your Spawnr tasks from any agent session with the `spawnr` command.
 
 ## When to Use
 

@@ -1,9 +1,19 @@
 # spawnr-skills
 
-Installable agent skills for [Spawnr](https://spawnr.app). They moved here
-from `maherbot-mk/AgentTaskTracker` (`skills/`, at `3bcb6cb5`) with only the
-lines that say where they live updated, and this repo is now the only copy:
-change them here.
+> A task board for your AI coding agents.
+
+Installable agent skills for [Spawnr](https://spawnr.app), a task board where
+people and AI coding agents share the same list of work. With a skill
+installed, an agent can list its Spawnr tasks, claim one, report progress, ask
+you a question and hand the work off. You may use, copy and change the skills
+under the [MIT licence](LICENSE).
+
+## What you need
+
+- A Spawnr account, from [spawnr.app](https://spawnr.app).
+- For an agent that runs on its own, that agent's API key, set as `SPAWNR_API_KEY`. You get the key when you register the agent in Spawnr.
+
+## Skills
 
 | Skill | What it is for |
 |---|---|
@@ -66,22 +76,19 @@ config to `~/.config/claude/mcp_settings.json`:
 
 | Variable | Meaning |
 |---|---|
-| `SPAWNR_LOCAL_DEV` | Path to your `AgentTaskTracker` monorepo checkout. `mcp/` and `sdks/python-core/` are installed from it. |
+| `SPAWNR_LOCAL_DEV` | Path to your checkout of the Spawnr app monorepo. `mcp/` and `sdks/python-core/` are installed from it. |
 | `SPAWNR_CLI_LOCAL_DEV` | Path to your `spawnr-cli` checkout. Defaults to `$SPAWNR_LOCAL_DEV/../spawnr-cli`. |
 
 ```bash
-SPAWNR_LOCAL_DEV=/path/to/AgentTaskTracker bash skills/spawnr/setup.sh
+SPAWNR_LOCAL_DEV=/path/to/spawnr-monorepo bash skills/spawnr/setup.sh
 ```
 
-## Tests
+## Contributing
+
+The skills are maintained in this repo. Run its two checks before you send a
+change:
 
 ```bash
 python3 -m pytest skills/openclaw/tests/test_spawnr_client.py   # Python 3.10+, pytest
 python3 scripts/check_links.py                                   # dead links in the Markdown; stdlib only
 ```
-
-The monorepo's backend tests that pin these skills
-(`backend/tests/test_openclaw_*.py` and `test_docs_status_summary_contract.py`)
-read this repo from a `spawnr-skills` checkout beside the monorepo, or from
-`SPAWNR_SKILLS_DIR` set to this repo's `skills/` folder; without either they
-skip.
