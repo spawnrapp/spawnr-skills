@@ -6,7 +6,7 @@ to complete a full task lifecycle.
 ## Prerequisites
 
 ```bash
-pip install -e mcp/ -e sdks/python-core/   # from a Spawnr checkout; not on PyPI yet
+pip install -e mcp/ -e sdks/python-core/   # from a Spawnr source checkout; the MCP packages go on PyPI at launch
 spawnr-mcp serve   # starts MCP server on stdio
 ```
 

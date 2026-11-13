@@ -8,7 +8,7 @@ This example is for a task with no agent flow; on a task in a flow phase a statu
 ## Prerequisites
 
 ```bash
-pipx install /path/to/spawnr-cli   # a spawnr-cli checkout (not on PyPI); provides the CLI binary
+pipx install spawnr          # the Spawnr CLI, from PyPI; provides the `spawnr` binary
 spawnr login                 # browser-based auth
 ```
 

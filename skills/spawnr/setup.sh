@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Spawnr Skill Setup — installs CLI + MCP, configures agent environment.
-# Run once from a spawnr-skills checkout (SPAWNR_LOCAL_DEV = the AgentTaskTracker monorepo checkout): SPAWNR_LOCAL_DEV=/path/to/AgentTaskTracker bash skills/spawnr/setup.sh
+# Spawnr Skill Setup — installs the Spawnr CLI from PyPI and starts `spawnr login`.
+# Run once: bash setup.sh
+# Developers: SPAWNR_LOCAL_DEV=/path/to/AgentTaskTracker installs editable checkouts of the CLI and the MCP server instead, and writes the MCP config.
 set -euo pipefail
 
 BOLD='\033[1m'
@@ -28,29 +29,42 @@ detect_pip() {
     fi
 }
 
-PIP_CMD=$(detect_pip)
-if [[ -z "$PIP_CMD" ]]; then
-    die "No Python package manager found. Install pip or uv first."
-fi
-
-# ── Install spawnr-cli + spawnr-mcp ────────────────────────────────────────
+# ── Install the CLI (and, for local dev, the MCP server) ───────────────────
 
 if [[ -n "${SPAWNR_LOCAL_DEV:-}" ]]; then
+    PIP_CMD=$(detect_pip)
+    if [[ -z "$PIP_CMD" ]]; then
+        die "No Python package manager found. Install pip or uv first."
+    fi
     log "Using local editable install (SPAWNR_LOCAL_DEV=$SPAWNR_LOCAL_DEV)"
     # spawnr-cli now lives in its own repo (sibling checkout by default).
     # Override with SPAWNR_CLI_LOCAL_DEV if it's elsewhere.
     $PIP_CMD install -e "${SPAWNR_CLI_LOCAL_DEV:-$SPAWNR_LOCAL_DEV/../spawnr-cli}"
     # spawnr-mcp depends on spawnr-core, which is not on PyPI either.
     $PIP_CMD install -e "$SPAWNR_LOCAL_DEV/sdks/python-core" -e "$SPAWNR_LOCAL_DEV/mcp"
+    log "CLI + MCP installed."
 else
-    # ISSUE-322: spawnr-cli and spawnr-mcp are not on PyPI, so a plain
-    # `pip install` would fetch whatever package squats those names.
-    die "spawnr-cli and spawnr-mcp are not on PyPI yet. Re-run with SPAWNR_LOCAL_DEV=/path/to/AgentTaskTracker (spawnr-cli checked out beside it)."
+    # `spawnr` is the CLI's package on PyPI. ISSUE-322: spawnr-mcp and
+    # spawnr-core are not published, so never install those names from PyPI:
+    # that would fetch whatever package squats them.
+    if command -v pipx &>/dev/null; then
+        pipx install spawnr
+    elif command -v uv &>/dev/null; then
+        uv tool install spawnr
+    elif command -v pip3 &>/dev/null; then
+        pip3 install --user spawnr
+    elif command -v pip &>/dev/null; then
+        pip install --user spawnr
+    else
+        die "No installer found. Install pipx (https://pipx.pypa.io), then run this again."
+    fi
+    log "CLI installed. The MCP server packages arrive at launch, so MCP is not installed or configured."
 fi
-log "CLI + MCP installed."
 
-# ── Configure MCP for Claude Code ───────────────────────────────────────────
+# ── Configure MCP for Claude Code (local dev only) ──────────────────────────
+# Not re-indented on purpose: where this config is written is spawnr-skills#2.
 
+if [[ -n "${SPAWNR_LOCAL_DEV:-}" ]]; then
 MCP_CONFIG_DIR="$HOME/.config/claude"
 MCP_CONFIG_FILE="$MCP_CONFIG_DIR/mcp_settings.json"
 
@@ -80,7 +94,7 @@ config['mcpServers']['spawnr'] = {
     'command': 'spawnr-mcp',
     'args': ['serve'],
     'env': {
-        'SPAWNR_BASE_URL': '${SPAWNR_BASE_URL:-https://api.spawnr.co}'
+        'SPAWNR_BASE_URL': '${SPAWNR_BASE_URL:-http://localhost:8000}'
     }
 }
 with open('$MCP_CONFIG_FILE', 'w') as f:
@@ -98,12 +112,13 @@ else
       "command": "spawnr-mcp",
       "args": ["serve"],
       "env": {
-        "SPAWNR_BASE_URL": "https://api.spawnr.co"
+        "SPAWNR_BASE_URL": "http://localhost:8000"
       }
     }
   }
 }
 EOF
+fi
 fi
 
 # ── Auth check ───────────────────────────────────────────────────────────────
