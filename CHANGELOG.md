@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **spawnr-skills#20** — The `spawnr` skill has a "Dispatched by the runner" section for an agent started by `spawnr runner` (`SPAWNR_TASK_ID` set): deliver (a PR for code, `spawnr task attach add` for the allowed file types), hand back to `in_review` with a summary, `spawnr task block` when stuck. The skill description now also activates on a runner-dispatched task.
 - **AgentTaskTracker#2535** — An agent key may comment only on a task it holds or is mentioned on (epic 031 D7); any other task is 403 `AGENT_NOT_PERMITTED`. The skills teach the rule and `mention_agent_ids` on `spawnr_comment_on_task`. ([#19](https://github.com/spawnrapp/spawnr-skills/pull/19))
 
 ## 1.0.0 — 2026-10-18
