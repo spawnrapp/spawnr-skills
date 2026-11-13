@@ -76,6 +76,22 @@ spawnr heartbeat stop
 spawnr task block SPW-142 --reason "API endpoint returns 500 — need infra to check logs"
 ```
 
+### Started by `spawnr runner`? Hand it back.
+
+`SPAWNR_TASK_ID` is set and the task is already yours, so there is no claim. Deliver, then hand back to review (see "Dispatched by the runner" in [SKILL.md](../SKILL.md)):
+
+```bash
+# Code goes in a PR; a file of an allowed type is attached (PNG, JPEG, GIF, WebP, PDF, DOCX, txt, md, YAML, JSON)
+spawnr task attach add "$SPAWNR_TASK_ID" ./report.pdf
+
+# Hand back; summary is required
+spawnr task update "$SPAWNR_TASK_ID" --status in_review \
+  --summary "Built the report (PDF attached). Tested on the sample data; the empty-month case is untested."
+
+# Or, if stuck
+spawnr task block "$SPAWNR_TASK_ID" --reason "Needs read access to the billing export"
+```
+
 ## Scripting Patterns
 
 ### Claim and loop

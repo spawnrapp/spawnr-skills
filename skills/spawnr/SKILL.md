@@ -1,6 +1,6 @@
 ---
 name: spawnr
-description: One skill to manage your Spawnr tasks from any agent session. Activate when the user mentions "spawnr task", "spawnr workflow", "claim a task", "pick up a task", "report status to spawnr", "update spawnr", "list my tasks", "show spawnr tasks", "ship this task", "mark done in spawnr", "block a task", "task is blocked", or works with task IDs like SPW-123 or AUTH-101.
+description: One skill to manage your Spawnr tasks from any agent session. Activate when the user mentions "spawnr task", "spawnr workflow", "claim a task", "pick up a task", "report status to spawnr", "update spawnr", "list my tasks", "show spawnr tasks", "ship this task", "mark done in spawnr", "block a task", "task is blocked", works with task IDs like SPW-123 or AUTH-101, or was dispatched by the Spawnr runner (the environment has SPAWNR_TASK_ID).
 ---
 
 # Spawnr — Task Tracker for AI Agents
@@ -17,6 +17,7 @@ Activate this skill when the user mentions any of:
 - "ship this task", "mark done in spawnr"
 - "block a task", "task is blocked"
 - Working with task IDs like `SPW-123` or `AUTH-101`
+- Dispatched by `spawnr runner`: `SPAWNR_TASK_ID` is set in the environment (see "Dispatched by the runner")
 
 ## The agent protocol (read it first)
 
@@ -185,6 +186,27 @@ curl http://localhost:8000/api/v1/tasks/memory-export \
 Both return the same Markdown document — completed (`done`) tasks, newest
 first — starting with `# Memory Export — <agent name>`.
 
+## Dispatched by the runner
+
+`spawnr runner` starts you headless (for example `claude -p -- <task title>`) and nobody is watching the terminal. The person who dispatched the task sees only what you put on the task, so deliver there and hand the task back before you exit.
+
+**Recognise it:** `SPAWNR_TASK_ID` is set. The runner also sets `SPAWNR_TASK_TITLE`, `SPAWNR_TASK_DESCRIPTION`, `SPAWNR_HANDOFF_INSTRUCTIONS`, `SPAWNR_RUN_ID`, `SPAWNR_AGENT_ID` and `SPAWNR_API_BASE`. The task is already claimed for you: skip Steps 0 to 2, do not claim, and do not look for other work. Read `SPAWNR_HANDOFF_INSTRUCTIONS` if it is not empty. The prompt may name the task only by its ObjectId; that is the same id as `$SPAWNR_TASK_ID`. A task id in a prompt without `SPAWNR_TASK_ID` set does not make the task yours: claim it first (Step 2).
+
+**Deliver** (the person cannot read the runner's disk):
+- **Code:** a branch and a PR. Put the PR URL in the summary. Source files and HTML cannot be attached.
+- **A file of an allowed type:** `spawnr task attach add "$SPAWNR_TASK_ID" <path>`. Allowed: PNG, JPEG, GIF, WebP, PDF, DOCX, plain text, Markdown, YAML and JSON; at most 10 MB per file and 20 per task. If the upload is refused (the CLI can fail to send YAML with the right type), treat the file as "anything else" below.
+- **Anything else:** say in the summary where the file is, and that it exists only on the runner host.
+
+**Hand back:**
+```bash
+spawnr task update "$SPAWNR_TASK_ID" --status in_review --summary "<what you built, what you tested, what is untested>"
+```
+The target is `in_review`, not `done`: a person accepts the work. `summary` is required (Step 4). If `in_review` is refused with `Cannot move from … Allowed transitions: …`, use the listed status that puts the work in front of a person for review, if there is one; never pick `done`, `canceled` or the workflow's initial status just to get past the refusal. If none fits, leave the status as it is and post the same text with `spawnr task comment add "$SPAWNR_TASK_ID" --body "<summary>"`. On a task in a flow phase, both this hand-back and `spawnr task block` need a handoff instead: see "Phases and handoffs with the CLI".
+
+**Stuck:** `spawnr task block "$SPAWNR_TASK_ID" --reason "<why>"`, then exit.
+
+**Hand back yourself, before you exit.** Don't leave the task for the runner to move: only your own hand-back carries your summary and your result.
+
 ## Dependency-blocked tasks (`task_blocked`)
 
 A task may be **blocked by** other tasks. Claiming or starting a blocked task —
@@ -333,6 +355,8 @@ spawnr task list          # List tasks (--status, --sprint, --assignee, --blocke
 spawnr task claim         # Claim next open task (--sprint, --workspace)
 spawnr task ship <ID> --pr <URL>   # Mark done with PR link
 spawnr task block <ID> --reason <text>  # Mark blocked
+spawnr task update <ID> --status in_review --summary <text>  # Hand back for review (runner-dispatched: see above)
+spawnr task attach add <ID> <FILE>  # Attach a file (PNG, JPEG, GIF, WebP, PDF, DOCX, txt, md, YAML, JSON; 10 MB)
 spawnr task show <ID>     # Full detail with comments (--json for machine output)
 spawnr heartbeat start    # Start heartbeat daemon (--task, --step, --interval)
 spawnr heartbeat stop     # Stop heartbeat
