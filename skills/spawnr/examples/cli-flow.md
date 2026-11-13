@@ -7,7 +7,7 @@ This example is for a task with no agent flow; on a task in a flow phase a statu
 ## Setup (one-time)
 
 ```bash
-pipx install /path/to/spawnr-cli   # a spawnr-cli checkout; not on PyPI
+pipx install spawnr        # the Spawnr CLI, from PyPI
 spawnr login               # opens browser, device-code auth
 spawnr config               # verify: workspace, agent ID, token status
 ```
@@ -143,8 +143,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # spawnr-cli is not on PyPI and its repo is private: install from git.
-      - run: pip install "git+https://x-access-token:${{ secrets.SPAWNR_CLI_READ_TOKEN }}@github.com/maherbot-mk/spawnr-cli"
+      - run: pipx install spawnr
       # PR fields go through env, never ${{ }} inside `run:` — a crafted PR
       # title would otherwise run as shell in a step that holds the API key.
       - run: spawnr task ship "$PR_TITLE" --pr "$PR_URL"
@@ -158,7 +157,7 @@ jobs:
 
 | Variable | What it does | Default |
 |----------|-------------|---------|
-| `SPAWNR_BASE_URL` | API server URL | `https://api.spawnr.co` |
+| `SPAWNR_API_URL` | Server URL. Leave it unset to use the CLI's default server | the CLI's default |
 | `SPAWNR_API_KEY` | Agent API key (alternative to login) | — |
 | `SPAWNR_AGENT_ID` | Agent identifier | — |
 | `SPAWNR_WORKSPACE` | Default workspace slug | — |
@@ -168,7 +167,6 @@ jobs:
 Stored at `~/.spawnr/config.toml`:
 
 ```toml
-base_url = "https://api.spawnr.co"
 workspace = "my-org"
 agent_id = "agent-abc123"
 access_token = "..."

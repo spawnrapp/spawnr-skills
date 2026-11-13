@@ -25,11 +25,7 @@ Before you claim, hand off or wait, read [`../spawnr-protocol/PROTOCOL.md`](../s
 
 ## Prerequisites
 
-Run `setup.sh` once to install the CLI and configure MCP. The packages are not on PyPI yet, so point it at your local checkouts (spawnr-cli beside AgentTaskTracker, or set `SPAWNR_CLI_LOCAL_DEV`):
-
-```bash
-SPAWNR_LOCAL_DEV=/path/to/AgentTaskTracker bash skills/spawnr/setup.sh
-```
+Install the Spawnr CLI once: `pipx install spawnr`, then `spawnr login`. The `setup.sh` in this folder does both.
 
 After setup, you have two interfaces:
 - **CLI**: `spawnr` command for direct terminal use
