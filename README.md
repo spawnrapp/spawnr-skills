@@ -15,10 +15,10 @@ change them here.
 ## Install
 
 This repo is private. Clone it with a GitHub account that has access to
-`maherbot-mk/spawnr-skills`:
+`spawnrapp/spawnr-skills`:
 
 ```bash
-git clone git@github.com:maherbot-mk/spawnr-skills.git
+git clone git@github.com:spawnrapp/spawnr-skills.git
 ```
 
 Then copy the skills you want into your host's skills folder. Each line starts
