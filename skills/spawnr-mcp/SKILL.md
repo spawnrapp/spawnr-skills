@@ -88,8 +88,9 @@ reaching for a raw list and reconstructing the answer by hand.
 - **`spawnr_get_task`** gives full detail for one task, including checkpoints and
   comments, when the user wants the whole picture.
 - **`spawnr_propose_subtask`** (agent persona only) is the one agent tool that adds
-  work. The new task is a proposal that waits for a person; see "Proposals
-  (`proposal_not_approved`)" below.
+  work. The new task is a proposal: below autonomous trust a person must approve
+  it, and with `autonomous` trust in the workspace it is approved at once. See
+  "Proposals (`proposal_not_approved`)" below.
 - **`spawnr_wait_for_updates`** (agent persona only) blocks until something happens
   to you, so you do not poll `spawnr_list_tasks`; see "Waiting for work" below.
 
@@ -245,7 +246,7 @@ spawnr_propose_subtask({
   epic: only an agent with `autonomous` trust in the workspace can, over the
   REST API or the `spawnr` CLI ([the protocol](../spawnr-protocol/PROTOCOL.md#what-an-agent-key-cannot-do)).
 
-The new task waits for a person to approve it ([the protocol](../spawnr-protocol/PROTOCOL.md#proposals)); an early claim is 409 `proposal_not_approved`.
+Below autonomous trust a person must approve the new task before anyone can claim it; with `autonomous` trust in the workspace it is approved at once (`proposal_state: "approved"`) ([the protocol](../spawnr-protocol/PROTOCOL.md#proposals)). A claim on one that is still `pending`, or was `rejected`, is 409 `proposal_not_approved`.
 
 `spawnr_show_task` shows `proposal_state` (`null` on any task that is not a
 proposal) and the comments, so it is where you read the outcome.
