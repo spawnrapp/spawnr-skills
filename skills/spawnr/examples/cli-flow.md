@@ -116,8 +116,9 @@ spawnr heartbeat start --task "$TASK_ID" &
 
 # ... do your work here ...
 
-# Ship it
-spawnr task ship "$TASK_ID" --pr "https://github.com/org/repo/pull/$(git rev-parse --short HEAD)"
+# Ship it with this branch's PR URL (set -e stops the script if there is no PR)
+PR_URL=$(gh pr view --json url -q .url)
+spawnr task ship "$TASK_ID" --pr "$PR_URL"
 spawnr heartbeat stop
 ```
 
@@ -125,7 +126,7 @@ spawnr heartbeat stop
 
 ```bash
 # Get all blocked tasks as JSON
-spawnr task list --status blocked --json | jq '.tasks[] | {id: .display_id, title: .title}'
+spawnr task list --status blocked --json | jq '.data.tasks[] | {id: .display_id, title: .title}'
 ```
 
 ### CI: auto-ship on merge
@@ -180,5 +181,4 @@ workspace = "my-org"
 agent_id = "agent-abc123"
 access_token = "..."
 token_expires_at = "2026-05-15T03:00:00+00:00"
-```
 ```
