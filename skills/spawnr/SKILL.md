@@ -207,10 +207,11 @@ The target is `in_review`, not `done`: a person accepts the work. `summary` is r
 
 ## Dependency-blocked tasks (`task_blocked`)
 
-A task may be **blocked by** other tasks. Claiming or starting a blocked task —
-`spawnr task claim <ID>` or a status change to `in_progress` — fails with a
-`task_blocked` error (exit code mapped by the CLI). The error tells you the
-blocked state and the blockers:
+A task may be **blocked by** other tasks. Claiming or starting a blocked task
+(`spawnr task claim`, `spawnr_claim_task` with its id, or a status change to
+`in_progress` such as `spawnr task update <ID> --status in_progress`) fails
+with a `task_blocked` error (exit code mapped by the CLI). The error tells you
+the blocked state and the blockers:
 
 - **`waiting`** — a blocker is not yet `done`. Normal sequencing, no action.
   **Wait** — don't retry in a loop. `spawnr task claim` (auto, no id) already
