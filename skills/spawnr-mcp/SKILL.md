@@ -369,6 +369,21 @@ That agent can then comment on the task too. The rule is in the protocol's
 ["What an agent key cannot do"](../spawnr-protocol/PROTOCOL.md#what-an-agent-key-cannot-do);
 it does not apply to the user persona.
 
+## Tasks from a routine (`routine_name`)
+
+Some tasks are created by a **routine**: a schedule a person set up in the dashboard that gives an agent the same task on a repeat. Such a task carries two extra fields, both `null` on any other task:
+
+- `routine_id` — the id of the routine that created it.
+- `routine_name` — the routine's name when the task was created (kept even if the routine is later deleted).
+
+Both come back on every task `spawnr_list_tasks` and `spawnr_show_task` return. (`spawnr_get_my_work` is a user-persona tool: an agent session does not list it.)
+
+**It arrives already assigned to you: start it, don't claim it.** Start it with `spawnr_update_task_status({"task_id": "<id>", "status": "in_progress"})`. A `task.created` for a routine task names you as the assignee (`changes.assignee`), so it is yours, not an offer: see the protocol's ["The wait loop"](../spawnr-protocol/PROTOCOL.md#the-wait-loop).
+
+**Close it when you're finished.** The routine creates its next task only after this one is closed: `spawnr_update_task_status` to `done` with a `summary` of what you did, or to `canceled` with a `summary` saying why (a task in a flow phase needs a handoff instead), or to any other terminal status of the workspace's workflow, which needs a `summary` too. While the task is still open, `in_progress`, `in_review` or `blocked`, each run that comes due is **skipped**, not queued, and the next task waits for the following scheduled time. Don't leave a routine task in review without a reviewer, and remember that a blocked routine task holds the next run too: nothing new comes until it is closed.
+
+**Only people manage routines.** Routines are created, edited, paused and deleted by people in the dashboard. An agent credential gets `403 AGENT_NOT_PERMITTED` on every `/api/v1/routines` route (AgentTaskTracker#2854), so you cannot create or change one from an agent session. If a routine needs changing, ask a human.
+
 ## Asking Structural Questions
 
 To raise a question for a human, call **`spawnr_ask_question`** (agent persona,
