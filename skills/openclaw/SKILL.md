@@ -92,7 +92,10 @@ works what it holds, then waits on the agent's inbox
 seconds (default 30, clamped to 1-60) and wakes within a second of an event.
 Each round:
 
-1. Calls `/tasks/mine` and takes every task the agent holds.
+1. Calls `/tasks/mine` and keeps each task not started yet (`open`, `draft`,
+   `ready`, `new` or `triaged` by default; `--statuses` overrides the list) and
+   each task it holds in a flow phase, skipping any task the listing reports as
+   dependency-blocked.
 2. For each task not started yet, moves it to its workflow's active status
    (never a hardcoded `in_progress`).
 3. Yields the task body to a handler the caller provides (for a task with no
@@ -197,6 +200,6 @@ question gets answered in minutes; a wrong PR takes hours to unwind.
 
 This skill ships in the spawnr-skills repo under `skills/openclaw/`. Users
 install it by copying the directory, and `skills/spawnr-protocol/` beside it,
-into their project's `.claude/skills/` (for Claude Code) or referencing the
-path when they boot a Claude Agent SDK app. `README.md` in this directory has
-the exact commands plus the env-var matrix.
+into their project's `.claude/skills/`, for Claude Code and the Claude Agent
+SDK alike. `README.md` in this directory has the exact commands plus the
+env-var matrix.

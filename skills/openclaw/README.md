@@ -30,8 +30,9 @@ about "my Spawnr tasks", task IDs, the wait loop, etc.
 
 ### Claude Agent SDK
 
-Copy the skill to `.claude/skills/openclaw` (and `spawnr-protocol` beside
-it) as above, then load it through `ClaudeAgentOptions`:
+Copy the skill to `.claude/skills/openclaw`, and `spawnr-protocol` beside it
+(the skill links to its [`PROTOCOL.md`](../spawnr-protocol/PROTOCOL.md) for the
+rules), as above, then load it through `ClaudeAgentOptions`:
 
 ```python
 import asyncio
@@ -51,9 +52,6 @@ asyncio.run(main())
 ```
 
 Omit `"project"` from `setting_sources` and the skills do not load.
-
-Keep `skills/spawnr-protocol` beside it: the skill links to
-[`PROTOCOL.md`](../spawnr-protocol/PROTOCOL.md) for the rules.
 
 ### Raw scripts (no Claude at all)
 
@@ -159,9 +157,11 @@ task. A single task's transition failing this way (or 422ing/5xxing outright)
 never stops the loop — every other queued task still gets processed.
 
 The poller skips a task `/tasks/mine` reports as dependency-blocked, and the
-backend's dependency gate covers a workflow's own active status, so
-`bug/default` claims through `new -> triaged -> fixing` like any other
-built-in template.
+backend's dependency gate covers a workflow's own active status, so on
+`bug/default` a `triaged` bug is claimed through `triaged → fixing`. A `new` bug
+is not claimed: `bug/default` lets only an Owner, Admin or Manager move it to
+`triaged`, and the server checks an agent's status change as a Member's, so the
+bug stays `new`, with a warning on stderr each round, until a person triages it.
 
 Your handler receives the task dict and returns the result:
 
