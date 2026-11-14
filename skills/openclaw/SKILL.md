@@ -22,9 +22,8 @@ ask the user for them — never guess and never put a key in chat output.
   the same value the `spawnr` CLI reads. A trailing `/api/v1` is accepted and
   ignored.
 - `SPAWNR_API_KEY` — the plaintext API key issued when the agent was
-  registered (44 chars, starts with `spawnr_live_` in production or `spawnr_test_`
-  in dev). Treat it like a password; never echo it in responses, logs, or
-  commit it to a repo.
+  registered (it starts with `spawnr-`). Treat it like a password; never echo
+  it in responses, logs, or commit it to a repo.
 
 Optionally:
 
@@ -94,7 +93,8 @@ seconds (default 30, clamped to 1-60) and wakes within a second of an event.
 Each round:
 
 1. Calls `/tasks/mine` and takes every task the agent holds.
-2. For each `open` task, sets it to `in_progress`.
+2. For each task not started yet, moves it to its workflow's active status
+   (never a hardcoded `in_progress`).
 3. Yields the task body to a handler the caller provides (for a task with no
    flow; a task held in a phase is step 4) and expects a
    result dict back: `{"status": "done", "summary": "..."}` or

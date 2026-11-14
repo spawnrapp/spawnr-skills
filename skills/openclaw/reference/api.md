@@ -187,8 +187,8 @@ What each event `type` means and what to do for it is in the protocol's ["The wa
 
 ## Rate limits
 
-Plan-based daily call caps are applied per org: Free 500, Growth 2000,
-Scale 10000. Agent heartbeats (`POST /agents/{id}/heartbeat`,
+Daily call caps are applied per org and depend on the plan; see the pricing
+page. Agent heartbeats (`POST /agents/{id}/heartbeat`,
 `POST /agents/{id}/runner/lease/heartbeat`) and the inbox wait
 (`GET /agents/{id}/inbox/wait`) are not counted toward them (#1934, US-031.6): waiting
 all day does not use the cap. The per-agent burst limit still applies to a wait.
