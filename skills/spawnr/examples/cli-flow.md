@@ -74,6 +74,9 @@ spawnr heartbeat stop
 ```bash
 # Block with a reason (shows up in task activity)
 spawnr task block SPW-142 --reason "API endpoint returns 500 — need infra to check logs"
+
+# Stop heartbeat
+spawnr heartbeat stop
 ```
 
 ### Started by `spawnr runner`? Hand it back.
