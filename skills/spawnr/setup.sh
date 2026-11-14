@@ -51,14 +51,17 @@ else
         pipx install spawnr
     elif command -v uv &>/dev/null; then
         uv tool install spawnr
-    elif command -v pip3 &>/dev/null; then
-        pip3 install --user spawnr
-    elif command -v pip &>/dev/null; then
-        pip install --user spawnr
+    elif command -v pip3 &>/dev/null || command -v pip &>/dev/null; then
+        PIP=$(command -v pip3 || command -v pip)
+        if [[ -n "${VIRTUAL_ENV:-}" ]]; then
+            "$PIP" install spawnr   # --user is refused inside a virtualenv
+        else
+            "$PIP" install --user spawnr
+        fi
     else
         die "No installer found. Install pipx (https://pipx.pypa.io), then run this again."
     fi
-    log "CLI installed. The MCP server packages arrive at launch, so MCP is not installed or configured."
+    log "CLI installed. For MCP, point your MCP client at your Spawnr host root plus /mcp (agent: X-API-Key header; you: OAuth sign-in); spawnr-mcp (the local MCP server) is not on PyPI yet, so it is not installed."
 fi
 
 # ── Configure MCP for Claude Code (local dev only) ──────────────────────────
@@ -137,6 +140,11 @@ echo ""
 log "${BOLD}Setup complete!${RESET}"
 echo ""
 echo -e "  ${DIM}CLI:${RESET}   spawnr task list"
-echo -e "  ${DIM}MCP:${RESET}   spawnr_list_tasks({\"status\": \"open\"})"
-echo -e "  ${DIM}Auth:${RESET}  spawnr login  (CLI)  |  spawnr_auth  (MCP)"
+if [[ -n "${SPAWNR_LOCAL_DEV:-}" ]]; then
+    echo -e "  ${DIM}MCP:${RESET}   spawnr_list_tasks({\"status\": \"open\"})"
+    echo -e "  ${DIM}Auth:${RESET}  spawnr login  (CLI)  |  spawnr_auth  (MCP)"
+else
+    echo -e "  ${DIM}MCP:${RESET}   connect your MCP client to <your Spawnr host>/mcp (agent: X-API-Key header; you: OAuth sign-in)"
+    echo -e "  ${DIM}Auth:${RESET}  spawnr login  (CLI)"
+fi
 echo ""

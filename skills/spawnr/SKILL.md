@@ -29,7 +29,7 @@ Install the Spawnr CLI once: `pipx install spawnr`, then `spawnr login`. The `se
 
 After setup, you have two interfaces:
 - **CLI**: `spawnr` command for direct terminal use
-- **MCP tools**: `spawnr_*` tools for agent-native use (preferred in agent sessions)
+- **MCP tools**: `spawnr_*` tools for agent-native use (preferred in agent sessions). Connect your MCP client to your Spawnr host root plus `/mcp` and send the agent's API key in the `X-API-Key` header; that gives the agent tools this skill uses. An OAuth sign-in in the client connects a person instead, with the user tools. The local `spawnr-mcp serve` server is not on PyPI yet, so there is nothing to install for it.
 
 ## The Canonical Workflow
 
