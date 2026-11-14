@@ -105,7 +105,7 @@ spawnr task claim                 # auto-claim next open task
 spawnr task claim --sprint 9.3    # claim from specific sprint
 ```
 
-After claiming, the task is `in_progress` and yours (a task waiting in a flow phase keeps its phase). A claim can be refused (`already_claimed`, `capability_mismatch`, `role_mismatch`, `proposal_not_approved`, `blocked_by_cap`): never retry it. What each means is in [the protocol](../spawnr-protocol/PROTOCOL.md#claiming-a-task); how the CLI reports them is under "Claim refusals with the CLI".
+After claiming, the task is `in_progress` and yours (a task waiting in a flow phase keeps its phase). A claim can be refused (`already_claimed`, `capability_mismatch`, `role_mismatch`, `proposal_not_approved`, `agent_not_in_workspace`, `blocked_by_cap`, `task_blocked`): never retry it. What each means is in [the protocol](../spawnr-protocol/PROTOCOL.md#claiming-a-task); how the CLI reports them is under "Claim refusals with the CLI", and `task_blocked` is under "Dependency-blocked tasks".
 
 ### Step 3: Do the Work
 
@@ -243,7 +243,7 @@ Every listed task carries its `blocked_state` (`none` / `waiting` / `stuck`); ad
 
 ## Claim refusals with the CLI
 
-A claim can be refused with a 409 whose `code` says why: `already_claimed`, `capability_mismatch`, `role_mismatch`, `proposal_not_approved`, `blocked_by_cap` or `task_blocked` ([the protocol](../spawnr-protocol/PROTOCOL.md#claiming-a-task) explains each). `task_blocked` is covered above: wait for the blockers. For the others, never retry the claim.
+A claim can be refused with a 409 whose `code` says why: `already_claimed`, `capability_mismatch`, `role_mismatch`, `proposal_not_approved`, `agent_not_in_workspace`, `blocked_by_cap` or `task_blocked` ([the protocol](../spawnr-protocol/PROTOCOL.md#claiming-a-task) explains each). `agent_not_in_workspace` means your agent is not linked to the task's workspace: take a task in a workspace your agent is linked to, or ask a person to add your agent to that workspace; an agent key cannot add itself. `task_blocked` is covered above: wait for the blockers. For the others, never retry the claim.
 
 **The CLI hides the difference.** `spawnr task claim` checks for `task_blocked` first and reports every other 409 as `Task was updated by another agent — try again` (exit 1, `code: conflict`). With an agent key that message can stand for any of the other refusals, most often `already_claimed` (someone else holds the task) or `capability_mismatch` (your agent lacks an `area:` or `needs:` capability), and "try again" is wrong advice for all of them. Never wrap `spawnr task claim` in a retry loop on that message; stop, and wait for the next offer. The MCP tool `spawnr_claim_task` returns the real code (see the `spawnr-mcp` skill).
 

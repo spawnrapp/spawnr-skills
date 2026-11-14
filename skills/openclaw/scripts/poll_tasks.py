@@ -1459,9 +1459,9 @@ def _handle_inbox_event(me: str, event: dict) -> None:
     * `task.created` without `changes`, or `task.updated` that did not assign the task: a
       phase offered to this agent's role. Claim it (the same PATCH `spawnr_claim_task`
       sends). A 409 (`already_claimed`, `role_mismatch`, `capability_mismatch`,
-      `proposal_not_approved`, `task_blocked`, `blocked_by_cap`) means it is not ours: skip
-      it, never retry. A claimed task shows up in the next `/tasks/mine` listing and is
-      worked there.
+      `proposal_not_approved`, `agent_not_in_workspace`, `task_blocked`, `blocked_by_cap`)
+      means it is not ours: skip it, never retry. A claimed task shows up in the next
+      `/tasks/mine` listing and is worked there.
     * `task.created` or `task.updated` carrying `changes.assignee.new`: the task was created
       for this agent or assigned to it (the inbox only carries its own), so it is already
       ours and there is nothing to claim; the next listing works it.
