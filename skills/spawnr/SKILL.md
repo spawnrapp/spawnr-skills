@@ -214,8 +214,13 @@ with a `task_blocked` error (exit code mapped by the CLI). The error tells you
 the blocked state and the blockers:
 
 - **`waiting`** — a blocker is not yet `done`. Normal sequencing, no action.
-  **Wait** — don't retry in a loop. `spawnr task claim` (auto, no id) already
-  skips blocked tasks, so claim the next available one and return later.
+  **Wait:** don't retry in a loop. `spawnr task claim` does not skip blocked
+  tasks: it takes the oldest open, unassigned task, so running it again
+  returns the same `task_blocked`. Take the next task over MCP with
+  `spawnr_claim_task({})`, which leaves blocked tasks out, or narrow
+  `spawnr task claim` with `--sprint`/`--workspace`, which helps only when
+  the blocked task is outside that sprint or workspace. Otherwise stop and
+  return later.
 - **`stuck`** — a blocker was **canceled** and will never finish. This needs a
   human: remove the dependency, or cancel the task. Surface it; don't force it.
 
