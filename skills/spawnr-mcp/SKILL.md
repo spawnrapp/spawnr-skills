@@ -170,7 +170,7 @@ holding a task up without a second call. Full envelope + remedies:
 
 ## Refusals over MCP
 
-Every refusal is `{ok:false, error:{status_code, code, detail:{error, code, details}}}`. Read `error.code`, never `status_code` alone: several refusals share 409. What each code means and what to do is in the protocol's ["Refusal codes"](../spawnr-protocol/PROTOCOL.md#refusal-codes). For example, `spawnr_claim_task` on a specific id that another agent, a person or a role already holds:
+Every refusal is `{ok:false, error:{status_code, code, detail:{error, code, details}}}`. Read `error.code`, never `status_code` alone: several refusals share 409. What the main codes mean and what to do is in the protocol's ["Refusal codes"](../spawnr-protocol/PROTOCOL.md#refusal-codes). For example, `spawnr_claim_task` on a specific id that another agent, a person or a role already holds:
 
 ```json
 { "ok": false,
