@@ -109,7 +109,7 @@ story, task or bug this agent holds.
 ```
 
 The response carries `proposal_state`: `"pending"` until a person approves it,
-or `"approved"` for an agent with autonomous trust. A person who rejects it
+or `"approved"` for an agent with autonomous trust in the workspace. A person who rejects it
 cancels it and posts the reason as a comment on the task. A `parent_id` this agent
 does not hold is 403 `AGENT_NOT_PERMITTED` at every trust level. Without
 `parent_id`, the create needs `autonomous` trust in the workspace: it then
