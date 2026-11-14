@@ -54,9 +54,12 @@ The agent owner sets these once when registering the Spawnr agent:
 
 | Variable | Required | Example |
 | --- | --- | --- |
-| `SPAWNR_API_URL` | yes | `https://app.yourco.com/api/v1` (include `/api/v1`) |
+| `SPAWNR_API_URL` | yes | `https://app.yourco.com` (the same value the `spawnr` CLI reads) |
 | `SPAWNR_API_KEY` | yes | `spawnr_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx` |
 | `SPAWNR_WORKSPACE_ID` | no | narrows list calls to a single workspace |
+
+A trailing `/api/v1` on `SPAWNR_API_URL` is accepted and ignored, so setups
+written for the old form keep working.
 
 The API key is shown once at agent registration — copy it to your secret
 manager immediately and put it into the agent runtime via a `.env`,
@@ -67,7 +70,7 @@ Kubernetes Secret, GitHub Actions secret, or equivalent. Never commit it.
 Verify connectivity:
 
 ```bash
-export SPAWNR_API_URL=https://app.yourco.com/api/v1
+export SPAWNR_API_URL=https://app.yourco.com
 export SPAWNR_API_KEY=spawnr_live_xxxxxxxxxxxx
 
 ./scripts/spawnr_client.py whoami

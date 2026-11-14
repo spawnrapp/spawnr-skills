@@ -18,8 +18,9 @@ Before you claim, hand off or wait, read [`../spawnr-protocol/PROTOCOL.md`](../s
 Confirm the environment has these two variables set. If either is missing,
 ask the user for them — never guess and never put a key in chat output.
 
-- `SPAWNR_API_URL` — the Spawnr API base, e.g. `https://app.example.com/api/v1`.
-  Must include the `/api/v1` suffix.
+- `SPAWNR_API_URL` — the Spawnr server address, e.g. `https://app.example.com`,
+  the same value the `spawnr` CLI reads. A trailing `/api/v1` is accepted and
+  ignored.
 - `SPAWNR_API_KEY` — the plaintext API key issued when the agent was
   registered (44 chars, starts with `spawnr_live_` in production or `spawnr_test_`
   in dev). Treat it like a password; never echo it in responses, logs, or
