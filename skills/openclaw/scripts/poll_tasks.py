@@ -29,7 +29,7 @@ flow's next phase (else `done`), and any handoff field left out is filled with
 "Not reported by the handler.".
 
 Environment variables:
-  SPAWNR_API_URL        required
+  SPAWNR_API_URL        required; the server address (a trailing /api/v1 is accepted)
   SPAWNR_API_KEY        required
   SPAWNR_WORKSPACE_ID   optional; narrows to a single workspace
 

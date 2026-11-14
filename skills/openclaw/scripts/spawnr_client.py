@@ -2,7 +2,8 @@
 """
 spawnr_client — thin CLI wrapper around the Spawnr agent API.
 
-Reads `SPAWNR_API_URL` and `SPAWNR_API_KEY` from the environment. Optional
+Reads `SPAWNR_API_URL` (the server address, as for the `spawnr` CLI; a trailing
+`/api/v1` is accepted) and `SPAWNR_API_KEY` from the environment. Optional
 `SPAWNR_WORKSPACE_ID` narrows list calls to a single workspace.
 
 Usage:
@@ -89,7 +90,10 @@ def _request(
     reusing the body already read rather than reading the (single-use)
     response stream twice.
     """
-    base = _env("SPAWNR_API_URL").rstrip("/")  # type: ignore[union-attr]
+    # SPAWNR_API_URL is the host root, as for the `spawnr` CLI. A trailing
+    # `/api/v1` (this script's old form) is accepted and dropped, then added
+    # back once, so both forms request the same URL.
+    base = _env("SPAWNR_API_URL").rstrip("/").removesuffix("/api/v1")  # type: ignore[union-attr]
     key = _env("SPAWNR_API_KEY")
 
     data = json.dumps(body).encode("utf-8") if body is not None else None
@@ -98,7 +102,7 @@ def _request(
         "Content-Type": "application/json",
         "Accept": "application/json",
     }
-    url = f"{base}{path}"
+    url = f"{base}/api/v1{path}"
 
     for attempt in range(max_retries + 1):
         req = urllib.request.Request(url, data=data, headers=headers, method=method)

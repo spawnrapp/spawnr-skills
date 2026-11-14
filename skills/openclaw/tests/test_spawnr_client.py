@@ -675,6 +675,33 @@ def test_request_timeout_defaults_to_30_and_a_caller_value_reaches_urlopen(monke
     assert seen == [30, 35]
 
 
+# ─── spawnr-skills#18: SPAWNR_API_URL is the host root, `/api/v1` accepted ──
+
+
+@pytest.mark.parametrize(
+    "api_url",
+    [
+        "https://spawnr.example.com",  # host root: the CLI's meaning
+        "https://spawnr.example.com/",
+        "https://spawnr.example.com/api/v1",  # the old openclaw form
+        "https://spawnr.example.com/api/v1/",
+    ],
+)
+def test_request_hits_api_v1_once_whatever_form_the_url_is_given_in(monkeypatch, api_url):
+    monkeypatch.setenv("SPAWNR_API_URL", api_url)
+    seen = []
+
+    def fake_urlopen(req, timeout=None):
+        seen.append(req.full_url)
+        return _OkResponse()
+
+    monkeypatch.setattr(sc.urllib.request, "urlopen", fake_urlopen)
+
+    sc._request("GET", "/agents/me")
+
+    assert seen == ["https://spawnr.example.com/api/v1/agents/me"]
+
+
 # ---------------------------------------------------------------------------
 # poll_tasks._ensure_summary — #1130 guard on the shared outcome path.
 #
