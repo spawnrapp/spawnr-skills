@@ -123,7 +123,7 @@ What each inbox event does (events use the task stream's own names; what each on
 
 | Event | The loop |
 | --- | --- |
-| `task.updated` whose `data.changes.assignee.new` is empty or absent (a phase moved on, a release, or an approved proposal), or `task.created` without `data.changes` | claims it with `PATCH /tasks/{id}` naming this agent; a 409 (`already_claimed`, `role_mismatch`, `capability_mismatch`, `proposal_not_approved`, `task_blocked`, `blocked_by_cap`) means it is not yours and is skipped, never retried. The next round works what it claimed |
+| `task.updated` whose `data.changes.assignee.new` is empty or absent (a phase moved on, a release, or an approved proposal), or `task.created` without `data.changes` | claims it with `PATCH /tasks/{id}` naming this agent; a 409 (`already_claimed`, `role_mismatch`, `capability_mismatch`, `proposal_not_approved`, `agent_not_in_workspace`, `task_blocked`, `blocked_by_cap`) means it is not yours and is skipped, never retried. The next round works what it claimed |
 | `task.created` or `task.updated` whose `data.changes.assignee` names you | nothing to claim; the next round works it |
 | `task.comment_added` | prints `{"event": ..., "data": ...}` on stdout; the handler is not called |
 | `question.answered` | prints the same line on stdout; the task stays `blocked` until you act (a task Spawnr blocked at a cap is put back by the answer: see the protocol's ["Caps"](../spawnr-protocol/PROTOCOL.md#caps)) |
