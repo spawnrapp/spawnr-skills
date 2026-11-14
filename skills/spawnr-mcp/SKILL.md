@@ -63,7 +63,7 @@ reaching for a raw list and reconstructing the answer by hand.
 | "Which workspaces can I see?" (orientation) | `spawnr_list_workspaces` |
 | "export what I learned / build context for next session" | `spawnr_export_memory` (agent persona only) |
 | "I found more work under a task I hold" | `spawnr_propose_subtask` (agent persona only) |
-| "Wait until work, a comment or an answer arrives" | `spawnr_wait_for_updates` (agent persona only, agent key on a local MCP server) |
+| "Wait until work, a comment or an answer arrives" | `spawnr_wait_for_updates` (agent persona only: an agent key on the hosted `/mcp` connector or a local MCP server) |
 
 - **`spawnr_get_my_work`** returns the caller's own active tasks (priority-sorted),
   blocked tasks, and pending questions in one call. Prefer it over searching for
@@ -319,7 +319,8 @@ below). The answer arrives as a `question.answered` event from
 
 The agent loop is **wait, act, hand off**, not a timer that polls
 `spawnr_list_tasks`. `spawnr_wait_for_updates` is an agent-persona tool and needs
-the agent's own key on a **local MCP server** (`SPAWNR_API_KEY`):
+the agent's own key: on the hosted `/mcp` connector, sent in the `X-API-Key` header
+(or as `Authorization: Bearer <agent key>`), or on a local MCP server (`SPAWNR_API_KEY`):
 
 ```
 spawnr_wait_for_updates({"timeout": 25})
@@ -330,10 +331,15 @@ spawnr_wait_for_updates({"timeout": 25})
   and returns as soon as something happens to you.
 - **`events` empty means nothing happened: call it again.** The server remembers
   where you stopped, so an event is delivered once and none is skipped between calls;
-  there is no cursor for you to pass. A restarted MCP server starts from now and does
-  not replay what came before.
+  there is no cursor for you to pass. A local MCP server keeps your place until it
+  restarts; the hosted `/mcp` connector keeps it for 30 minutes after your last wait.
+  A first wait, or the first after that, starts from now and does not replay what
+  came before.
 - The wait reports what happens after you start waiting. Before your first wait,
-  pick up work that is already waiting with `spawnr_claim_task({})`.
+  and after a gap of more than 30 minutes on the hosted connector, pick up work that
+  is already waiting with `spawnr_claim_task({})`.
+- On the hosted connector, run one waiting session per agent key: sessions that
+  share a key split the events between them, so each misses what another one got.
 - A wait is liveness, not work: it does not count toward the organization's daily
   call cap.
 - If the agent is paused the call fails with 403 `agent_paused`. Do not call again in
@@ -341,12 +347,9 @@ spawnr_wait_for_updates({"timeout": 25})
 
 Take one action per event, from the table in the protocol's ["The wait loop"](../spawnr-protocol/PROTOCOL.md#the-wait-loop). Over MCP, "claim" is `spawnr_claim_task({"task_id": data.task_id})` and "read the task" is `spawnr_show_task`.
 
-**Not over the hosted `/mcp` connector.** There the tool is not listed, and a call by
-name returns a 403: *"spawnr_wait_for_updates is not available over the hosted /mcp
-connector. Use an agent key on a local MCP server (SPAWNR_API_KEY), `spawnr inbox
-wait`, or GET /api/v1/agents/{id}/inbox/wait with X-API-Key."* Do not retry it; use one
-of those three (`spawnr inbox wait` is the `spawnr` CLI, once your version has it).
-The user persona does not have the tool.
+**Not for a person.** The user persona does not have the tool, on a local server or
+over the hosted `/mcp` connector: the wait reads an agent's own inbox. A call by name
+from a person's session gets a 403; do not retry it.
 
 ## Commenting on a Task
 
