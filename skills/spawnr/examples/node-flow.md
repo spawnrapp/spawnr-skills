@@ -17,15 +17,16 @@ spawnr login                 # browser-based auth
 ```javascript
 const { execSync } = require('child_process');
 
+// Human output, as in a terminal: with its stdout piped, the CLI prints JSON
 function run(cmd) {
-  const result = execSync(cmd, { encoding: 'utf-8' });
+  const result = execSync(cmd, { encoding: 'utf-8', env: { ...process.env, SPAWNR_OUTPUT: 'human' } });
   return result;
 }
 
-// Or for JSON output, use --json flag:
+// Or for JSON output, use --json flag; this returns the envelope's "data":
 function runJSON(cmd) {
   const raw = execSync(cmd + ' --json', { encoding: 'utf-8' });
-  return JSON.parse(raw);
+  return JSON.parse(raw).data;
 }
 ```
 
@@ -36,11 +37,11 @@ function runJSON(cmd) {
 run('spawnr task list --status todo --limit 10');
 
 // Machine-readable
-const tasks = runJSON('spawnr task list --status todo --json');
-console.log(`Found ${tasks.total_count} open tasks`);
+const { tasks } = runJSON('spawnr task list --status todo');
+console.log(`Found ${tasks.length} open tasks (first page)`);
 
 // Pick the first one
-const task = tasks.tasks[0];
+const task = tasks[0];
 console.log(`Working on: ${task.display_id} — ${task.title}`);
 ```
 
@@ -51,7 +52,7 @@ console.log(`Working on: ${task.display_id} — ${task.title}`);
 run('spawnr task claim --sprint 9.3');
 
 // The output shows:
-// ✓ Claimed SPW-142: Fix auth middleware bug
+// Claimed SPW-142: Fix auth middleware bug
 //   Status → in_progress
 //   Assignee → agent-abc123
 ```
@@ -74,7 +75,7 @@ console.log(status);
 ```javascript
 // After opening a PR:
 run('spawnr task ship SPW-142 --pr https://github.com/org/repo/pull/456');
-// ✓ Shipped SPW-142
+// Shipped SPW-142
 //   PR: https://github.com/org/repo/pull/456
 //   Status → done
 
@@ -86,7 +87,7 @@ run('spawnr heartbeat stop');
 
 ```javascript
 run('spawnr task block SPW-142 --reason "Need access to staging environment"');
-// ✗ Blocked SPW-142
+// Blocked SPW-142
 //   Reason: Need access to staging environment
 //   Status → blocked
 ```
@@ -113,19 +114,32 @@ taskWatcher.stdout.on('data', (data) => {
 ## CI/CD Integration
 
 ```yaml
-# GitHub Actions example
-- name: Claim and work on task
-  env:
-    SPAWNR_API_KEY: ${{ secrets.SPAWNR_API_KEY }}
-    SPRINT: ${{ github.event.inputs.sprint }}
-    PR_URL: ${{ github.event.pull_request.html_url }}
-  run: |
-    CLAIMED=$(spawnr task claim --sprint "$SPRINT" --output json)
-    TASK_ID=$(echo "$CLAIMED" | jq -r '.data.display_id // .data.id // empty')
-    if [ -z "$TASK_ID" ]; then
-      echo "No open task in sprint $SPRINT"
-      exit 0
-    fi
-    # ... build, test, deploy ...
-    spawnr task ship "$TASK_ID" --pr "$PR_URL"
+# .github/workflows/work-task.yml: run it by hand from the Actions tab
+on:
+  workflow_dispatch:
+    inputs:
+      sprint:
+        required: true
+jobs:
+  work:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pipx install spawnr
+      - name: Claim and work on task
+        env:
+          SPAWNR_API_KEY: ${{ secrets.SPAWNR_API_KEY }}
+          SPRINT: ${{ github.event.inputs.sprint }}
+        run: |
+          [ -n "$SPRINT" ] || { echo "No sprint given" >&2; exit 1; }
+          CLAIMED=$(spawnr task claim --sprint "$SPRINT" --output json)
+          TASK_ID=$(echo "$CLAIMED" | jq -r '.data.display_id // .data.id // empty')
+          if [ -z "$TASK_ID" ]; then
+            echo "No open task in sprint $SPRINT"
+            exit 0
+          fi
+          # ... build, test, open a PR, and put its URL in PR_URL,
+          # e.g. PR_URL=$(gh pr create --fill) with GH_TOKEN set ...
+          [ -n "$PR_URL" ] || { echo "No PR URL for $TASK_ID" >&2; exit 1; }
+          spawnr task ship "$TASK_ID" --pr "$PR_URL"
 ```
