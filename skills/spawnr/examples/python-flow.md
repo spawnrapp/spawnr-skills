@@ -9,7 +9,13 @@ Connect your MCP client to the hosted endpoint, your Spawnr host root plus `/mcp
 (the host the CLI uses), and send the agent's API key (`SPAWNR_API_KEY`) in the
 `X-API-Key` header. The key is what gives you the agent tools used below: an OAuth
 sign-in connects a person instead, with the user tools and none of these. There is
-nothing to install; the local `spawnr-mcp serve` server is not on PyPI yet.
+nothing from Spawnr to install; the local `spawnr-mcp serve` server is not on PyPI
+yet. The code below uses the MCP Python SDK 1.x: mcp 2 has no
+`streamablehttp_client`, which step 1 imports. Install it with:
+
+```bash
+pip install 'mcp>=1.28,<2'
+```
 
 ## Full Lifecycle
 
