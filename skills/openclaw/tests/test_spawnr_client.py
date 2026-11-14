@@ -970,6 +970,160 @@ class TestPhasedTasks:
         assert "blocked_by_cap" in capsys.readouterr().err
 
 
+class TestPeopleOnlyTransitions:
+    """An agent key's status change is checked by the server as a Member's. A
+    transition whose non-empty `allowed_roles` names neither Member nor Viewer is
+    refused for it, so the poller must not walk it: no PATCH it knows is refused,
+    and a finished task still ends in review with its summary kept.
+
+    The fixture is a 5-status bug workflow shaped like `bug/default` (this repo
+    cannot import the monorepo's templates)."""
+
+    PEOPLE = ["Owner", "Admin", "Manager"]
+    BUG = {
+        "statuses": [
+            {"key": "new", "category": "todo"},
+            {"key": "triaged", "category": "todo"},
+            {"key": "fixing", "category": "active"},
+            {"key": "in_review", "category": "active"},
+            {"key": "closed", "category": "done"},
+        ],
+        "done_statuses": ["closed"],
+        "transitions": [
+            {
+                "from": "new",
+                "to": "triaged",
+                "allowed_roles": PEOPLE,
+                "required_fields": [{"field": "severity"}],
+            },
+            {
+                "from": "triaged",
+                "to": "fixing",
+                "allowed_roles": [*PEOPLE, "Viewer"],
+                "required_fields": [{"field": "assignee_id"}],
+            },
+            {
+                "from": "fixing",
+                "to": "in_review",
+                "allowed_roles": [*PEOPLE, "Viewer"],
+                "required_fields": [],
+            },
+            {
+                "from": "in_review",
+                "to": "closed",
+                "allowed_roles": PEOPLE,
+                "required_fields": [],
+            },
+        ],
+    }
+    # A custom workflow whose FIRST outcome step is people-only: nothing to hand off to.
+    SHIP = {
+        "statuses": [
+            {"key": "todo", "category": "todo"},
+            {"key": "working", "category": "active"},
+            {"key": "done", "category": "done"},
+        ],
+        "done_statuses": ["done"],
+        "transitions": [
+            {"from": "todo", "to": "working", "allowed_roles": [], "required_fields": []},
+            {"from": "working", "to": "done", "allowed_roles": ["Owner"], "required_fields": []},
+        ],
+    }
+
+    @staticmethod
+    def _bug(status):
+        return {
+            "id": "T-1",
+            "type": "bug",
+            "workspace_id": "W-1",
+            "status": status,
+            "severity": "high",
+            "assignee_id": "agent-me",
+        }
+
+    def _run(self, monkeypatch, task, handler, workflow=None):
+        calls = []
+
+        def fake(method, path, body=None, **kw):
+            calls.append((method, path, body))
+            return (workflow or self.BUG) if method == "GET" else {}
+
+        monkeypatch.setattr(pt, "_request", fake)
+        monkeypatch.setattr(pt, "_workflow_cache", {})
+        pt._work_task(task, handler)
+        return [c for c in calls if c[0] == "PATCH"]
+
+    @pytest.mark.parametrize(
+        "roles,allowed",
+        [
+            ([], True),
+            (["Member"], True),
+            (["Owner", "Admin", "Manager", "Viewer"], True),
+            (["Owner", "Admin", "Manager"], False),
+            (["Owner"], False),
+        ],
+    )
+    def test_the_agent_role_rule(self, roles, allowed):
+        assert pt._role_allows_agent(roles) is allowed
+
+    def test_a_new_bug_is_not_claimed_and_sends_no_patch(self, monkeypatch, capsys):
+        handled = []
+
+        patches = self._run(
+            monkeypatch, self._bug("new"), lambda t: handled.append(t) or {}
+        )
+
+        assert pt._claim_path(self.BUG, self._bug("new")) is None
+        assert patches == []
+        assert handled == []
+        err = capsys.readouterr().err
+        assert "T-1" in err and "person" in err
+
+    def test_a_triaged_bug_claims_through_fixing(self):
+        assert pt._claim_path(self.BUG, self._bug("triaged")) == ["fixing"]
+
+    def test_a_closed_result_stops_in_review_with_the_summary(self, monkeypatch, capsys):
+        patches = self._run(
+            monkeypatch,
+            self._bug("triaged"),
+            lambda _t: {"status": "closed", "summary": "Fixed."},
+        )
+
+        assert [b["status"] for _m, _p, b in patches if "status" in b] == [
+            "fixing",
+            "in_review",
+        ]
+        assert "closed" not in [b.get("status") for _m, _p, b in patches]
+        summary = patches[-1][2]["summary"]
+        assert "Fixed." in summary and "person" in summary
+        assert json.loads(capsys.readouterr().out) == {
+            "task_id": "T-1",
+            "result": "closed",
+        }
+
+    def test_no_outcome_path_crosses_a_people_only_step(self):
+        for start in ("fixing", "in_review"):
+            assert pt._outcome_path(self.BUG, start, "done", self._bug(start)) is None
+        assert pt._handoff_path(self.BUG, self._bug("fixing"), "fixing") == ["in_review"]
+
+    def test_a_people_only_first_outcome_step_records_the_summary_as_a_comment(
+        self, monkeypatch
+    ):
+        task = {**self._bug("todo"), "type": "task"}
+
+        patches = self._run(
+            monkeypatch,
+            task,
+            lambda _t: {"status": "done", "summary": "Shipped it."},
+            workflow=self.SHIP,
+        )
+
+        assert patches == [
+            ("PATCH", "/tasks/T-1", {"status": "working"}),
+            ("PATCH", "/tasks/T-1", {"summary": "Shipped it."}),
+        ]
+
+
 class TestInboxWait:
     """US-031.6: the poller waits on `GET /agents/{id}/inbox/wait` instead of sleeping.
     An offered phase is claimed, a task assigned to the agent is left to the next

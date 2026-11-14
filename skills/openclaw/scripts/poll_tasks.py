@@ -139,14 +139,15 @@ def _load_handler(spec: str) -> Callable[[dict], dict]:
 _ACTIONABLE_STATUSES = frozenset({"open", "draft", "ready", "new", "triaged"})
 
 
-# #1256: `_claim_path` walks a MULTI-HOP path toward a claim target
-# (`story/default`: `draft -> ready -> in_progress`; `bug/default`:
-# `new -> triaged -> fixing`), one PATCH per hop. The backend's dependency
-# execution gate (`enforce_can_start`) only fires on the hop that ENTERS a
-# gate-active status — the LAST hop — so a dependency-blocked task used to
-# sail through every earlier hop and only 409 on the final one, leaving it
-# parked at the intermediate status (`ready`/`triaged`) with no reverse
-# transition to undo it. Neither built-in template defines one.
+# #1256: `_claim_path` can walk a MULTI-HOP path toward a claim target, one
+# PATCH per hop. The only built-in multi-hop claim is `story/default`'s
+# `draft -> ready -> in_progress`; `bug/default` claims a `triaged` bug in one
+# hop (`triaged -> fixing`) and never a `new` one (see `_claim_path`). The
+# backend's dependency execution gate (`enforce_can_start`) only fires on the
+# hop that ENTERS a gate-active status — the LAST hop — so a
+# dependency-blocked task used to sail through every earlier hop and only 409
+# on the final one, leaving it parked at the intermediate status (`ready`)
+# with no reverse transition to undo it. `story/default` defines none.
 #
 # `GET /tasks/mine` (#1256, `backend/app/api/routes/tasks.py`) now carries
 # the same derived `blocked_state` the gate itself computes, so this script
@@ -344,6 +345,15 @@ def _fields_satisfied(task: dict, required_fields: list[dict]) -> bool:
     return all(task.get(rf.get("field")) for rf in required_fields)
 
 
+def _role_allows_agent(allowed_roles: list) -> bool:
+    """This script runs on an agent key, which the server checks as a Member
+    (`task_update/apply.py`, `task_bulk.py`); `workflow_rules.validate_transition`
+    lets a Member take an edge only when `allowed_roles` is empty or names
+    Member or Viewer. Pinned against the real check by
+    backend/tests/test_openclaw_poll_actionable_statuses.py."""
+    return not allowed_roles or "Member" in allowed_roles or "Viewer" in allowed_roles
+
+
 def _find_transition_path(
     workflow: dict,
     task: dict,
@@ -352,7 +362,7 @@ def _find_transition_path(
 ) -> Optional[list[str]]:
     """Shortest legal path of status keys from `from_status` to the nearest
     status satisfying `is_target`, mirroring `validate_transition`'s own
-    edge semantics (`backend/app/api/routes/workflows.py`) so every path
+    edge semantics (`backend/app/services/workflow_rules.py`) so every path
     this returns is guaranteed PATCH-able:
 
     * `from_status` must be a real status in this workflow. An orphaned
@@ -363,7 +373,7 @@ def _find_transition_path(
       templates) — a single hop straight to any status satisfying
       `is_target`.
     * A status with NO transition object naming it as `from` is ALSO
-      any-to-any FROM THAT STATUS specifically (see workflows.py's "No
+      any-to-any FROM THAT STATUS specifically (see workflow_rules.py's "No
       transitions from this status defined — allow"). Matching the backend
       exactly, that wildcard hop is NOT gated by `required_fields` — no
       transition object exists to hold them. This looks like a bug at
@@ -372,6 +382,11 @@ def _find_transition_path(
       doesn't itself enforce.
     * Every REAL transition's `required_fields` must already be satisfied
       by the task's own current fields (see `_fields_satisfied`).
+    * A real transition whose non-empty `allowed_roles` names neither Member
+      nor Viewer is skipped (see `_role_allows_agent`): the server checks this
+      agent as a Member, so it would refuse that hop. Wildcard hops carry no
+      roles. This holds for claim, outcome and handoff walks alike, so a
+      returned path never contains a step the server refuses this agent.
 
     Returns the ordered list of status keys to PATCH through in sequence
     (excluding `from_status`), `[]` if `from_status` already satisfies
@@ -413,6 +428,8 @@ def _find_transition_path(
                 continue
             if not _fields_satisfied(task, t.get("required_fields", [])):
                 continue
+            if not _role_allows_agent(t.get("allowed_roles") or []):
+                continue
             new_path = path + [target]
             if is_target(target):
                 return new_path
@@ -422,9 +439,11 @@ def _find_transition_path(
                 # transitions of its own is any-to-any FROM there — see the
                 # wildcard branch above) but must never be treated as a
                 # mere WAYPOINT here. Continuing the search past it would
-                # let this walker route e.g. a bug/default claim through
-                # `wont_fix` (new -> wont_fix has no required_fields, so
-                # it's reachable) on the way to `fixing` (wont_fix has no
+                # let this walker route a claim through a terminal status,
+                # e.g. `bug/default`'s `wont_fix` on the way to `fixing`
+                # (an agent can't enter `wont_fix` there, since both edges
+                # into it are people-only, but a custom workflow may open
+                # one to a Member; wont_fix has no
                 # outgoing transitions of its own, so the wildcard rule
                 # would allow ANY next hop, unchecked). Each individual hop
                 # would be legal per the backend, but the INTENT is wrong,
@@ -452,8 +471,9 @@ def _find_transition_path(
 # so a transition into `bug/default`'s `fixing` gates exactly like
 # `in_progress` always has. `#1249` separately made `PATCH /tasks/{id}`
 # accept those workflow-native keys as legal write targets at all. Together
-# they're why this poller no longer needs to refuse every claim on
-# `bug/default` (see `_claim_path` below for what refusal case remains).
+# they're why a `triaged` `bug/default` bug claims. A `new` one is still
+# refused, for a role reason (only a person may take `new -> triaged`), not a
+# gate reason (see `_claim_path` below for the refusals that remain).
 #
 # Everything below duplicates that backend derivation because this script
 # can't import the backend package. Two pieces, matching the backend's own
@@ -539,6 +559,8 @@ def _gate_active_statuses(workflow: Optional[dict]) -> frozenset[str]:
 def _legal_active_path(workflow: Optional[dict], task: dict) -> Optional[list[str]]:
     """The workflow-LEGAL hops toward an "active"-category status.
 
+    Legal for THIS agent: every hop's required fields are set and its roles
+    admit a Member (see `_find_transition_path`).
     Legality only — no opinion on whether landing there is SAFE under the
     backend's dependency execution gate. `_claim_path` below wraps this
     with that opinion; use `_claim_path` for anything that's actually going
@@ -582,20 +604,21 @@ def _claim_path(workflow: Optional[dict], task: dict) -> Optional[list[str]]:
     accept a workflow's own status keys as legal write targets at all.
     Both reasons for the blanket `bug/default` refusal are gone: `fixing`
     now genuinely triggers the backend's gate — a dependency-blocked bug
-    409s exactly like `open -> in_progress` always has — so `bug/default`
-    claims through `new -> triaged -> fixing` like any other built-in
-    template's claim path now.
+    409s exactly like `open -> in_progress` always has — so a `triaged`
+    `bug/default` bug claims through `triaged -> fixing`. A `new` bug does
+    not: `new -> triaged` is open only to Owner, Admin and Manager, and an
+    agent is checked as a Member, so this returns `None` for it.
 
     KNOWN CONSEQUENCE of the multi-hop walk, now AVOIDED before the walk
     starts (#1256): `_walk_transitions` PATCHes each hop in `path` in turn,
     and if the FINAL hop 409s (`task_blocked`) or otherwise fails, the task
-    is left sitting at the intermediate status (`triaged` for
-    `bug/default`, `ready` for `story/default`) rather than rolled back —
-    there is no `triaged -> new` / `ready -> draft` transition to undo it
-    with. `_list_actionable_tasks` now drops any task `/tasks/mine` reports
-    as dependency-blocked (`blocked_state` in `{"waiting", "stuck"}`)
-    BEFORE it ever reaches this walk, so a task the backend would gate is
-    never even claimed. That narrows the hazard to two cases it can't
+    is left sitting at the intermediate status (`ready` for
+    `story/default`) rather than rolled back — there is no `ready -> draft`
+    transition to undo it with. `_list_actionable_tasks` now drops any task
+    `/tasks/mine` reports as dependency-blocked (`blocked_state` in
+    `{"waiting", "stuck"}`) BEFORE it ever reaches this walk, so a task the
+    backend would gate is never even claimed. That narrows the hazard to two
+    cases it can't
     close: a list-then-claim race (a blocker appears between the listing
     and the final hop) and a server too old to send `blocked_state` at all
     (`_is_dependency_blocked` fails open for that case, on purpose). In
@@ -605,12 +628,13 @@ def _claim_path(workflow: Optional[dict], task: dict) -> Optional[list[str]]:
     isolates it to one task per cycle, and the intermediate status is still
     `"todo"`-category, so the task stays listed and gets retried (self-
     healing, not silently stranded). This has been `story/default`'s
-    fallback behavior since #1245; `bug/default` shares it rather than
-    being treated as a special case.
+    fallback behavior since #1245. `bug/default`'s claim is one hop, so it
+    cannot park.
 
     The refusal branch below is NOT dead code post-#1246/#1249 — it still
     fires for a workflow (built-in or custom) with no workflow-legal path
-    at all, or whose only reachable active-category status is the one
+    at all (including one whose only path has a step only a person may
+    take), or whose only reachable active-category status is the one
     NAME-based carve-out `_gate_active_statuses` never treats as
     gate-safe (a status literally called `blocked`). Refusing there is
     still correct: claiming would either be illegal, or would enter
@@ -669,16 +693,21 @@ def _outcome_path(
 # #1247 — hand off, don't strand, when `_outcome_path` can't resolve the
 # handler's declared outcome to any legal status.
 #
-# Two live instances, both proven against the real WORKFLOW_TEMPLATES:
+# Three live instances, all proven against the real WORKFLOW_TEMPLATES:
 # `bug/default` has no literal `done` key and an ambiguous `done_statuses`
 # (`closed` vs `wont_fix` — see `_outcome_path`'s docstring for why guessing
 # between them is a product call, not this poller's), so an ordinarily
 # SUCCEEDING handler that returns nothing (`_work_task`'s default outcome,
 # `{"status": "done"}`) hits this. `story/default` has no `blocked` status at
 # all, so a FAILING handler (`_work_task`'s exception-mapped outcome) hits it
-# too. Both used to leave the task exactly where the claim step put it
-# (`fixing` / `in_progress`) forever — outside `_ACTIONABLE_STATUSES`, so
-# never re-listed, with only a stderr warning as the record.
+# too. The first two used to leave the task exactly where the claim step put
+# it (`fixing` / `in_progress`) forever — outside `_ACTIONABLE_STATUSES`, so
+# never re-listed, with only a stderr warning as the record. The third: an
+# outcome whose last step only a person may take (`in_review -> done` on
+# task/default and story/default, `in_review -> closed` on bug/default),
+# which `_find_transition_path` refuses for this agent (see
+# `_role_allows_agent`), so the task stops in review instead of the poller
+# sending a change the server refuses.
 #
 # The decision (not this poller's to re-litigate): auto-walking to a
 # terminal status is explicitly REJECTED. On `bug/default` the only terminal
@@ -711,12 +740,14 @@ def _handoff_candidates(workflow: dict) -> frozenset[str]:
     That is "the last stop before terminal, where a human takes over". This
     is a STRUCTURAL property, similar in spirit to `_find_transition_path`'s
     own edge semantics but not identical to them: unlike a real BFS hop,
-    the qualifying edge here is never gated by `_fields_satisfied` — a
-    candidate's status is a fact about the workflow's shape alone, not
-    about whether THIS task's fields happen to satisfy that specific
-    transition today. (Reachability from a given task's current status
-    — which DOES respect `required_fields` — is `_handoff_path`'s job,
-    below, via `_find_transition_path`.)
+    the qualifying edge here is never gated by `_fields_satisfied` or
+    `_role_allows_agent` (a people-only edge into "done" is exactly what
+    makes a status the place a person takes over) — a candidate's status
+    is a fact about the workflow's shape alone, not about whether THIS
+    task's fields happen to satisfy that specific transition today.
+    (Reachability from a given task's current status — which DOES respect
+    `required_fields` and roles — is `_handoff_path`'s job, below, via
+    `_find_transition_path`.)
 
     Verified against all six built-in templates
     (`TestHandoffCandidateDerivation` in
@@ -862,7 +893,7 @@ def _handoff_summary(outcome: dict, handoff_target: str) -> str:
     a legal target for — `bug/default` declaring `done` (its only
     `done`-category keys are `closed`/`wont_fix`, ambiguous per
     `_outcome_path`'s own docstring) and `story/default` declaring `blocked`
-    (it has no `blocked` status at all) are the two live handoff triggers
+    (it has no `blocked` status at all) are two of the live handoff triggers
     the block comment above `_handoff_candidates` names — `_normalize_
     outcome` DOES backfill (`"done"`/`"blocked"` are floor members, in the
     resolved set regardless of this workflow's own keys), so
@@ -882,8 +913,10 @@ def _handoff_summary(outcome: dict, handoff_target: str) -> str:
         body = f"Recorded by openclaw poll_tasks: {unresolved_status}."
     text = (
         f"[Outcome: {unresolved_status}] Handed off to '{handoff_target}' for "
-        f"human review — the workflow has no status that legally represents "
-        f"'{unresolved_status}'. {body}"
+        "human review — a person has to take the last step: this agent "
+        f"cannot move it to a status for '{unresolved_status}' (the workflow "
+        "has none, has more than one, or lets only a person make the move). "
+        f"{body}"
     )
     return text[:_MAX_TASK_SUMMARY_LEN]
 
@@ -1177,9 +1210,11 @@ def _work_task(task: dict, handler: Callable[[dict], dict]) -> None:
     # under the backend's dependency execution gate (see `_claim_path`'s
     # docstring). The gate is workflow-aware since #1246/#1249, so this is
     # no longer a blanket "this template never claims" case — `bug/default`
-    # claims fine now. What remains is a narrower safety net: a workflow
-    # with no legal path at all, or whose only reachable active status is
-    # the one name-based carve-out (`blocked`) the gate never fires on.
+    # claims a `triaged` bug. What remains is a narrower safety net: a
+    # workflow with no legal path at all (an unset required field, or a step
+    # only a person may take, as `bug/default`'s `new -> triaged`), or whose
+    # only reachable active status is the one name-based carve-out
+    # (`blocked`) the gate never fires on.
     # Don't force it in either case: skip this task, warn with the specific
     # reason, and leave it untouched for a human (or a future cycle) rather
     # than killing the worker, corrupting workflow state via the
@@ -1216,10 +1251,10 @@ def _work_task(task: dict, handler: Callable[[dict], dict]) -> None:
             )
         else:
             sys.stderr.write(
-                f"poll_tasks: skipping task {task_id}: no legal transition "
-                f"from {task.get('status')!r} to an active status in its "
-                "workflow — a transition's required field may be unset on "
-                "this task. Left unchanged.\n"
+                f"poll_tasks: skipping task {task_id}: this agent has no "
+                f"transition it may take from {task.get('status')!r} to an "
+                "active status in its workflow. A person must move it, or set "
+                "a field the transition requires. Left unchanged.\n"
             )
         return
     # #1271: pass the resolved set here too, not just on the outcome/handoff
@@ -1305,8 +1340,8 @@ def _work_task(task: dict, handler: Callable[[dict], dict]) -> None:
         # some other way, since no hop will carry it.
         if path is None:
             sys.stderr.write(
-                f"poll_tasks: task {task_id}: no legal transition to "
-                f"'{outcome.get('status')}' in its workflow, and no "
+                f"poll_tasks: task {task_id}: no transition this agent may "
+                f"take to '{outcome.get('status')}' in its workflow, and no "
                 "workflow handoff status is reachable either; recording "
                 f"the outcome as a comment only. Status stays "
                 f"'{claimed_status}'.\n"
@@ -1363,8 +1398,8 @@ def _work_task(task: dict, handler: Callable[[dict], dict]) -> None:
         # only on failure does today's pre-#1247 comment-only PATCH run as
         # the safety net — never both, and never neither.
         sys.stderr.write(
-            f"poll_tasks: task {task_id}: no legal transition to "
-            f"'{outcome.get('status')}' in its workflow; attempting handoff "
+            f"poll_tasks: task {task_id}: no transition this agent may take "
+            f"to '{outcome.get('status')}' in its workflow; attempting handoff "
             f"to '{handoff_target}' for human review instead of leaving it "
             f"at '{claimed_status}'.\n"
         )
