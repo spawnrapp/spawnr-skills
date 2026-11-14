@@ -1,6 +1,6 @@
 ---
 name: spawnr-protocol
-description: The shared rule set the other Spawnr skills (spawnr, spawnr-mcp, openclaw) point to — claiming, roles and areas, flows and handoffs, the wait loop, proposals, caps, the Advisor playbook, pause, and every refusal code with what to do. It has no commands of its own. Install it beside those skills and read its PROTOCOL.md when one of them links to it.
+description: The shared rule set the other Spawnr skills (spawnr, spawnr-mcp, openclaw) point to — claiming, roles and areas, flows and handoffs, the wait loop, proposals, caps, the Advisor playbook, pause, and the main refusal codes with what to do. It has no commands of its own. Install it beside those skills and read its PROTOCOL.md when one of them links to it.
 ---
 
 # Spawnr protocol

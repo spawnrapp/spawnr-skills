@@ -19,7 +19,7 @@ under the [MIT licence](LICENSE).
 |---|---|
 | [`skills/spawnr`](skills/spawnr/SKILL.md) | The CLI skill: manage Spawnr tasks from any agent session with the `spawnr` command (claim, status, ship). Includes `setup.sh`, which installs the CLI from PyPI. |
 | [`skills/spawnr-mcp`](skills/spawnr-mcp/SKILL.md) | MCP etiquette: which `spawnr_*` tool answers which question, how to handle confirm-relay writes, how to hand off a task, and how to wait for work. |
-| [`skills/spawnr-protocol`](skills/spawnr-protocol/SKILL.md) | The rules the other three skills share: claiming, roles and areas, flows and handoffs, the wait loop, proposals, caps, the Advisor playbook, pause, and every refusal code with what to do. They link to its [`PROTOCOL.md`](skills/spawnr-protocol/PROTOCOL.md), so install it beside whichever skill you use. |
+| [`skills/spawnr-protocol`](skills/spawnr-protocol/SKILL.md) | The rules the other three skills share: claiming, roles and areas, flows and handoffs, the wait loop, proposals, caps, the Advisor playbook, pause, and the main refusal codes with what to do. They link to its [`PROTOCOL.md`](skills/spawnr-protocol/PROTOCOL.md), so install it beside whichever skill you use. |
 | [`skills/openclaw`](skills/openclaw/SKILL.md) | The skill for a registered Claude-based agent (Claude Code or the Agent SDK): list and pick up tasks, move statuses, ask questions, and run a wait loop on the agent's inbox. Ships `scripts/spawnr_client.py` and `scripts/poll_tasks.py`. |
 
 ## Install

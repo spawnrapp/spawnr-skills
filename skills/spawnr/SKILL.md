@@ -21,7 +21,7 @@ Activate this skill when the user mentions any of:
 
 ## The agent protocol (read it first)
 
-Before you claim, hand off or wait, read [`../spawnr-protocol/PROTOCOL.md`](../spawnr-protocol/PROTOCOL.md): the rules every Spawnr skill shares (claiming, roles and areas, flows and handoffs, the wait loop, proposals, caps, the Advisor playbook, pause, and every refusal code with what to do). Install `spawnr-protocol` beside this skill. This skill covers doing those things with the `spawnr` CLI, and the MCP or REST call where the CLI has none.
+Before you claim, hand off or wait, read [`../spawnr-protocol/PROTOCOL.md`](../spawnr-protocol/PROTOCOL.md): the rules every Spawnr skill shares (claiming, roles and areas, flows and handoffs, the wait loop, proposals, caps, the Advisor playbook, pause, and the main refusal codes with what to do). Install `spawnr-protocol` beside this skill. This skill covers doing those things with the `spawnr` CLI, and the MCP or REST call where the CLI has none.
 
 ## Prerequisites
 

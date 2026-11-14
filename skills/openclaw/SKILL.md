@@ -11,7 +11,7 @@ clarifying questions when needed.
 
 ## The agent protocol (read it first)
 
-Before you claim, hand off or wait, read [`../spawnr-protocol/PROTOCOL.md`](../spawnr-protocol/PROTOCOL.md): the rules every Spawnr skill shares (claiming, roles and areas, flows and handoffs, the wait loop, proposals, caps, the Advisor playbook, pause, and every refusal code with what to do). Install `spawnr-protocol` beside this skill. This skill covers doing those things with `scripts/spawnr_client.py` and `scripts/poll_tasks.py`.
+Before you claim, hand off or wait, read [`../spawnr-protocol/PROTOCOL.md`](../spawnr-protocol/PROTOCOL.md): the rules every Spawnr skill shares (claiming, roles and areas, flows and handoffs, the wait loop, proposals, caps, the Advisor playbook, pause, and the main refusal codes with what to do). Install `spawnr-protocol` beside this skill. This skill covers doing those things with `scripts/spawnr_client.py` and `scripts/poll_tasks.py`.
 
 ## Before you start
 
