@@ -24,7 +24,7 @@ under the [MIT licence](LICENSE).
 
 ## Install
 
-With the [`skills` CLI](https://github.com/vercel-labs/skills), from your project folder:
+With the [`skills` CLI](https://github.com/vercel-labs/skills), from your project folder (add `-g` to install globally, from any folder):
 
 ```bash
 npx skills add spawnrapp/spawnr-skills
@@ -33,6 +33,7 @@ npx skills add spawnrapp/spawnr-skills
 - `--list` shows the skills in this repo and installs nothing.
 - `--skill <name>` installs only that skill; repeat it for more. Always include `spawnr-protocol`: every skill links to `../spawnr-protocol/PROTOCOL.md` for the rules, so `--skill spawnr` alone leaves that link dead.
 - `-a <agent>` names the agent to install for (repeat it for more), `--copy` copies the files instead of symlinking them, and `-y` skips the confirmation prompts.
+- `-g` installs the skills globally, for every project. Without `-g` the CLI asks whether you want the current project or global; with `-y`, or when an agent runs the command, it picks the current project.
 
 ```bash
 npx skills add spawnrapp/spawnr-skills --skill spawnr --skill spawnr-protocol -a claude-code -a codex -y
@@ -54,6 +55,36 @@ of `x` in place instead of the folder.
 
 `<name>` is `spawnr`, `spawnr-mcp` or `openclaw`. Always copy `spawnr-protocol` with it: every skill links to `../spawnr-protocol/PROTOCOL.md` for the rules.
 
+### Update
+
+If you installed with `npx skills add`, nothing updates by itself: you keep the copy from the day you installed until you run `update`. From your project folder (`-p` updates the project's skills only):
+
+```bash
+npx skills update -p
+```
+
+For a global install, name the four skills so your other global skills are left alone:
+
+```bash
+npx skills update -g spawnr spawnr-mcp spawnr-protocol openclaw
+```
+
+A skill that changed upstream is downloaded again whole, so any local edits to it are lost.
+
+### Remove
+
+Name the skills to remove: `--all` and `--skill '*'` remove every skill in that scope, not only Spawnr's. From your project folder:
+
+```bash
+npx skills remove spawnr spawnr-mcp spawnr-protocol openclaw
+```
+
+For a global install:
+
+```bash
+npx skills remove -g spawnr spawnr-mcp spawnr-protocol openclaw
+```
+
 ### `skills/spawnr/setup.sh`
 
 The `spawnr` skill drives the Spawnr CLI, the `spawnr` package on PyPI.
@@ -63,6 +94,7 @@ starts `spawnr login` unless `~/.spawnr/config.toml` already exists:
 ```bash
 bash skills/spawnr/setup.sh            # from a clone of this repo
 bash .claude/skills/spawnr/setup.sh    # after `npx skills add` into a Claude Code project
+bash ~/.claude/skills/spawnr/setup.sh  # after a global `npx skills add` for Claude Code
 ```
 
 By hand, that is `pipx install spawnr`, then `spawnr login`.
