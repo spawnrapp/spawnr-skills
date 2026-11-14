@@ -67,8 +67,10 @@ bash .claude/skills/spawnr/setup.sh    # after `npx skills add` into a Claude Co
 
 By hand, that is `pipx install spawnr`, then `spawnr login`.
 
-`setup.sh` does not install or configure the MCP server: its packages
-(`spawnr-mcp` and `spawnr-core`) are published at launch.
+`setup.sh` does not install or configure the local MCP server: its packages
+(`spawnr-mcp` and `spawnr-core`) are published at launch. Until then, connect your
+MCP client to the hosted endpoint, your Spawnr host root plus `/mcp`; the client
+runs the OAuth sign-in itself.
 
 To work on Spawnr itself, set `SPAWNR_LOCAL_DEV`. `setup.sh` then installs
 editable source checkouts instead, the MCP server included, and writes the MCP

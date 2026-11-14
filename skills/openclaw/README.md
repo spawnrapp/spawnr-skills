@@ -20,6 +20,7 @@ status, and ask clarifying questions.
 Copy the skill into your project's `.claude/skills/` directory:
 
 ```bash
+mkdir -p .claude/skills
 cp -R path/to/spawnr-skills/skills/openclaw .claude/skills/openclaw
 cp -R path/to/spawnr-skills/skills/spawnr-protocol .claude/skills/spawnr-protocol
 ```

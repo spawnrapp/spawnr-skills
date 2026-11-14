@@ -5,10 +5,9 @@ to complete a full task lifecycle.
 
 ## Prerequisites
 
-```bash
-pip install -e mcp/ -e sdks/python-core/   # from a Spawnr source checkout; the MCP packages go on PyPI at launch
-spawnr-mcp serve   # starts MCP server on stdio
-```
+Point your MCP client at the hosted endpoint: your Spawnr host root plus `/mcp`
+(the host the CLI uses). The client runs the OAuth sign-in when it connects. There
+is nothing to install: the local `spawnr-mcp serve` server is not on PyPI yet.
 
 ## Full Lifecycle
 
