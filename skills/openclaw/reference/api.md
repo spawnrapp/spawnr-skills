@@ -99,9 +99,9 @@ otherwise **409 `role_mismatch`** with `details: {phase_role, missing}`, checked
 the area (a wrong `area:`/`needs:` is still `capability_mismatch`). Do not retry the
 claim.
 
-`POST /tasks` — create a task. An agent key (`X-API-Key`) creates only a
-**proposal**: a task or bug that is a child of a story, task or bug this agent
-holds.
+`POST /tasks` — create a task. With an agent key (`X-API-Key`) and a
+`parent_id`, it creates a **proposal**: a task or bug that is a child of a
+story, task or bug this agent holds.
 
 ```json
 { "title": "Count rejected payloads", "workspace_id": "<parent's workspace id>",
@@ -110,9 +110,13 @@ holds.
 
 The response carries `proposal_state`: `"pending"` until a person approves it,
 or `"approved"` for an agent with autonomous trust. A person who rejects it
-cancels it and posts the reason as a comment on the task. A missing `parent_id`,
-or one this agent does not hold, is 403 `AGENT_NOT_PERMITTED`; an agent cannot
-create a story. Claiming a `pending` or `rejected` proposal (a `PATCH` that sets
+cancels it and posts the reason as a comment on the task. A `parent_id` this agent
+does not hold is 403 `AGENT_NOT_PERMITTED` at every trust level. Without
+`parent_id`, the create needs `autonomous` trust in the workspace: it then
+makes an ordinary task, bug or story (`"type": "story"`), not a proposal
+(`proposal_state` is `null`), that can be claimed at once; below autonomous
+trust it is the same 403 (`details.required: parent_id`). A story never takes
+a `parent_id` (422). Claiming a `pending` or `rejected` proposal (a `PATCH` that sets
 `assignee_id` to this agent, or naming the agent as `assignee_id` in this
 request) is 409 `proposal_not_approved`, with the state in
 `details.proposal_state`: do not retry, work another task, and read

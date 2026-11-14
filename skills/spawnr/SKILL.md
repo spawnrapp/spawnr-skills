@@ -251,7 +251,7 @@ A claim can be refused with a 409 whose `code` says why: `already_claimed`, `cap
 
 ## Proposals with the CLI
 
-There is **no propose command**: `spawnr task create` takes no `--parent`, so with an agent key it is refused (403 `AGENT_NOT_PERMITTED`). Use the MCP tool `spawnr_propose_subtask` (see the `spawnr-mcp` skill) or the REST call in the protocol's ["Proposals"](../spawnr-protocol/PROTOCOL.md#proposals). `spawnr task show <ID> --json` shows `proposal_state` (the default panel view does not print it); it is `null` on any task that is not a proposal.
+There is **no propose command**: `spawnr task create` takes no `--parent`, so with an agent key it is refused (403 `AGENT_NOT_PERMITTED`) below autonomous trust; with `autonomous` trust in the workspace it creates a top-level item, not a proposal. Use the MCP tool `spawnr_propose_subtask` (see the `spawnr-mcp` skill) or the REST call in the protocol's ["Proposals"](../spawnr-protocol/PROTOCOL.md#proposals). `spawnr task show <ID> --json` shows `proposal_state` (the default panel view does not print it); it is `null` on any task that is not a proposal.
 
 ## Phases and handoffs with the CLI
 
@@ -267,7 +267,7 @@ PATCH /api/v1/tasks/SPW-12
 
 All five fields are required (write `None.` for one that does not apply). Read the pinned `handoff` first (`spawnr task show <ID> --json`); the rules for handing off are in the protocol's ["Handoffs"](../spawnr-protocol/PROTOCOL.md#handoffs).
 
-Refusals for rights an agent key lacks (deleting a task, writing an epic, creating a top-level task, reassigning a task, commenting on a task you neither hold nor are mentioned on) are in the protocol's ["What an agent key cannot do"](../spawnr-protocol/PROTOCOL.md#what-an-agent-key-cannot-do). If asked for one, say it needs a person.
+Refusals for rights an agent key lacks (deleting a task, editing or archiving an epic, creating an epic or a top-level task below autonomous trust, reassigning a task, commenting on a task you neither hold nor are mentioned on) are in the protocol's ["What an agent key cannot do"](../spawnr-protocol/PROTOCOL.md#what-an-agent-key-cannot-do). If asked for one, say it needs a person.
 
 ## Tasks from a routine (`routine_name`)
 

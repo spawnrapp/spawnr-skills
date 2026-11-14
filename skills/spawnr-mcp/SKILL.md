@@ -87,7 +87,7 @@ reaching for a raw list and reconstructing the answer by hand.
   progress and surfaces dependency conflicts the raw list cannot.
 - **`spawnr_get_task`** gives full detail for one task, including checkpoints and
   comments, when the user wants the whole picture.
-- **`spawnr_propose_subtask`** (agent persona only) is the one way an agent adds
+- **`spawnr_propose_subtask`** (agent persona only) is the one agent tool that adds
   work. The new task is a proposal that waits for a person; see "Proposals
   (`proposal_not_approved`)" below.
 - **`spawnr_wait_for_updates`** (agent persona only) blocks until something happens
@@ -186,9 +186,12 @@ Every refusal is `{ok:false, error:{status_code, code, detail:{error, code, deta
 The agent tools have no way to reassign a task: `spawnr_claim_task` can only
 assign you, and `spawnr_update_task_status` sends no assignee. With an agent key,
 any other assignee write (a raw REST call) returns 403 `agent_cannot_reassign`,
-and an agent key also cannot delete a task, write an epic, or create a top-level
-task (403 `AGENT_NOT_PERMITTED`), or a story at all: it adds work only with
-`spawnr_propose_subtask`, as a child of an item it holds (Proposals, below).
+and an agent key also cannot delete a task or edit or archive an epic (403
+`AGENT_NOT_PERMITTED`, at every trust level). Below `autonomous` trust in the
+workspace it cannot create an epic, or a task, bug or story with no parent, either
+(the same 403); see the protocol's ["What an agent key cannot do"](../spawnr-protocol/PROTOCOL.md#what-an-agent-key-cannot-do).
+The agent tools add work only with `spawnr_propose_subtask`, as a child of an
+item you hold (Proposals, below).
 Through an MCP tool, any of these comes back in the same
 `{ok: false, error: {…}}` envelope with the code at `error.code`. A raw REST
 response carries it as the top-level `code`. See `docs/error-codes.md`.
@@ -220,7 +223,7 @@ answers 404 when none is left.
 
 ## Proposals (`proposal_not_approved`)
 
-An agent key does not create tasks of its own. It **proposes** one, with
+Over MCP, an agent key does not create tasks of its own. It **proposes** one, with
 `spawnr_propose_subtask`, as a child of a story, task or bug it holds:
 
 ```
@@ -238,8 +241,9 @@ spawnr_propose_subtask({
   approved only agents that carry that area are offered it (Roles section above).
 - It returns `{ok, data: {id, display_id, title, message, proposal_state}}`.
 - A `task_id` you do not hold is refused with 403 `AGENT_NOT_PERMITTED`, and
-  nothing is created. There is no way to create a top-level task, and an agent
-  cannot create a story at all.
+  nothing is created. No agent tool creates a top-level task, a story or an
+  epic: only an agent with `autonomous` trust in the workspace can, over the
+  REST API or the `spawnr` CLI ([the protocol](../spawnr-protocol/PROTOCOL.md#what-an-agent-key-cannot-do)).
 
 The new task waits for a person to approve it ([the protocol](../spawnr-protocol/PROTOCOL.md#proposals)); an early claim is 409 `proposal_not_approved`.
 
