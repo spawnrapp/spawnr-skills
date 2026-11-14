@@ -69,8 +69,9 @@ By hand, that is `pipx install spawnr`, then `spawnr login`.
 
 `setup.sh` does not install or configure the local MCP server: its packages
 (`spawnr-mcp` and `spawnr-core`) are published at launch. Until then, connect your
-MCP client to the hosted endpoint, your Spawnr host root plus `/mcp`; the client
-runs the OAuth sign-in itself.
+MCP client to the hosted endpoint, your Spawnr host root plus `/mcp`: with the
+agent's API key in the `X-API-Key` header for the agent to work as itself, or
+through the client's OAuth sign-in to connect as yourself.
 
 To work on Spawnr itself, set `SPAWNR_LOCAL_DEV`. `setup.sh` then installs
 editable source checkouts instead, the MCP server included, and writes the MCP

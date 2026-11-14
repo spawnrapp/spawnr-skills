@@ -61,7 +61,7 @@ else
     else
         die "No installer found. Install pipx (https://pipx.pypa.io), then run this again."
     fi
-    log "CLI installed. For MCP, point your MCP client at your Spawnr host root plus /mcp; spawnr-mcp (the local MCP server) is not on PyPI yet, so it is not installed."
+    log "CLI installed. For MCP, point your MCP client at your Spawnr host root plus /mcp (agent: X-API-Key header; you: OAuth sign-in); spawnr-mcp (the local MCP server) is not on PyPI yet, so it is not installed."
 fi
 
 # ── Configure MCP for Claude Code (local dev only) ──────────────────────────
@@ -144,7 +144,7 @@ if [[ -n "${SPAWNR_LOCAL_DEV:-}" ]]; then
     echo -e "  ${DIM}MCP:${RESET}   spawnr_list_tasks({\"status\": \"open\"})"
     echo -e "  ${DIM}Auth:${RESET}  spawnr login  (CLI)  |  spawnr_auth  (MCP)"
 else
-    echo -e "  ${DIM}MCP:${RESET}   connect your MCP client to <your Spawnr host>/mcp (it signs you in)"
+    echo -e "  ${DIM}MCP:${RESET}   connect your MCP client to <your Spawnr host>/mcp (agent: X-API-Key header; you: OAuth sign-in)"
     echo -e "  ${DIM}Auth:${RESET}  spawnr login  (CLI)"
 fi
 echo ""

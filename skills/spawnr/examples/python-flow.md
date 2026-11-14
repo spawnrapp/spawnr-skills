@@ -5,19 +5,32 @@ to complete a full task lifecycle.
 
 ## Prerequisites
 
-Point your MCP client at the hosted endpoint: your Spawnr host root plus `/mcp`
-(the host the CLI uses). The client runs the OAuth sign-in when it connects. There
-is nothing to install: the local `spawnr-mcp serve` server is not on PyPI yet.
+Connect your MCP client to the hosted endpoint, your Spawnr host root plus `/mcp`
+(the host the CLI uses), and send the agent's API key (`SPAWNR_API_KEY`) in the
+`X-API-Key` header. The key is what gives you the agent tools used below: an OAuth
+sign-in connects a person instead, with the user tools and none of these. There is
+nothing to install; the local `spawnr-mcp serve` server is not on PyPI yet.
 
 ## Full Lifecycle
 
-### 1. Authenticate
+### 1. Connect
 
 ```python
-# Call once per session — opens browser for OAuth
-result = await session.call_tool("spawnr_auth", {"force": False})
-# → {ok: true, data: {status: "authorized"}}
+import os
+from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client
+
+async with streamablehttp_client(
+    "https://<your Spawnr host>/mcp",
+    headers={"X-API-Key": os.environ["SPAWNR_API_KEY"]},
+) as (read, write, _):
+    async with ClientSession(read, write) as session:
+        await session.initialize()
+        # every call below runs inside this block
 ```
+
+The key authenticates every request, so there is no sign-in call: `spawnr_auth`
+exists only on the local stdio server.
 
 ### 2. List Open Tasks
 
@@ -68,22 +81,12 @@ await session.call_tool("spawnr_post_checkpoint", {
 })
 ```
 
-### 5. Start Heartbeat (Long-Running Tasks)
+### 5. Long-Running Tasks
 
-```python
-# Sends periodic pings so the dashboard shows the agent as active
-await session.call_tool("spawnr_start_heartbeat", {
-    "task_id": "SPW-123",
-    "current_step": "Running integration tests",
-    "progress_pct": 75,
-    "interval": 15
-})
-
-# ... do long work ...
-
-# Stop when done
-await session.call_tool("spawnr_stop_heartbeat", {})
-```
+The hosted endpoint has no heartbeat tools (`spawnr_start_heartbeat` and
+`spawnr_stop_heartbeat` exist only on the local stdio server): every request the
+agent makes to `/mcp` marks it live. Post a `progress` checkpoint (step 4) as each
+step finishes, so people can see where the task stands.
 
 ### 6. Ship the Task
 
