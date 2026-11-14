@@ -120,7 +120,12 @@ taskWatcher.stdout.on('data', (data) => {
     SPRINT: ${{ github.event.inputs.sprint }}
     PR_URL: ${{ github.event.pull_request.html_url }}
   run: |
-    spawnr task claim --sprint "$SPRINT"
+    CLAIMED=$(spawnr task claim --sprint "$SPRINT" --output json)
+    TASK_ID=$(echo "$CLAIMED" | jq -r '.data.display_id // .data.id // empty')
+    if [ -z "$TASK_ID" ]; then
+      echo "No open task in sprint $SPRINT"
+      exit 0
+    fi
     # ... build, test, deploy ...
-    spawnr task ship SPW-123 --pr "$PR_URL"
+    spawnr task ship "$TASK_ID" --pr "$PR_URL"
 ```

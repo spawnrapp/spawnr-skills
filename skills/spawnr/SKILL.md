@@ -176,7 +176,7 @@ spawnr_export_memory({})                              # everything (capped at 50
 
 **REST (no CLI command yet — companion issue tracks `spawnr task memory-export`):**
 ```bash
-curl http://localhost:8000/api/v1/tasks/memory-export \
+curl https://app.example.com/api/v1/tasks/memory-export \
   -H "X-API-Key: spawnr-<your-key>"
 ```
 

@@ -100,9 +100,9 @@ spawnr task block "$SPAWNR_TASK_ID" --reason "Needs read access to the billing e
 #!/bin/bash
 set -e
 
-# Claim next task
-OUTPUT=$(spawnr task claim 2>&1)
-TASK_ID=$(echo "$OUTPUT" | grep -oP 'Claimed \K\S+')
+# Claim next task (in the JSON, "data" is null when no task is open)
+OUTPUT=$(spawnr task claim --output json)
+TASK_ID=$(echo "$OUTPUT" | jq -r '.data.display_id // .data.id // empty')
 
 if [[ -z "$TASK_ID" ]]; then
   echo "No tasks available"
@@ -146,9 +146,18 @@ jobs:
       - run: pipx install spawnr
       # PR fields go through env, never ${{ }} inside `run:` — a crafted PR
       # title would otherwise run as shell in a step that holds the API key.
-      - run: spawnr task ship "$PR_TITLE" --pr "$PR_URL"
+      # The task ID comes from the branch name or the PR title (SPW is the
+      # prefix here; use your workspace's). No ID fails the step.
+      - run: |
+          TASK_ID=$(printf '%s\n%s\n' "$PR_BRANCH" "$PR_TITLE" | grep -oE 'SPW-[0-9]+' | head -n 1)
+          if [ -z "$TASK_ID" ]; then
+            echo "No task ID like SPW-123 in the branch name or the PR title" >&2
+            exit 1
+          fi
+          spawnr task ship "$TASK_ID" --pr "$PR_URL"
         env:
           SPAWNR_API_KEY: ${{ secrets.SPAWNR_API_KEY }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_URL: ${{ github.event.pull_request.html_url }}
 ```
