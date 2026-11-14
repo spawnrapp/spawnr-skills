@@ -111,15 +111,15 @@ fi
 
 echo "Working on $TASK_ID"
 
-# Start heartbeat in background
-spawnr heartbeat start --task "$TASK_ID" &
+# Start heartbeat (it runs in the background by itself); stop it however the script ends
+spawnr heartbeat start --task "$TASK_ID"
+trap 'spawnr heartbeat stop' EXIT
 
 # ... do your work here ...
 
 # Ship it with this branch's PR URL (set -e stops the script if there is no PR)
 PR_URL=$(gh pr view --json url -q .url)
 spawnr task ship "$TASK_ID" --pr "$PR_URL"
-spawnr heartbeat stop
 ```
 
 ### Batch status check
