@@ -337,7 +337,7 @@ has no way to check your read against what was actually decided.
 | `spawnr_update_task_status` | Transition task: open → in_progress → done/blocked |
 | `spawnr_post_checkpoint` | Post progress checkpoint (reasoning, artifact, progress, error) |
 | `spawnr_ask_question` | Ask a human a question (agent persona); it waits in their Questions inbox |
-| `spawnr_propose_subtask` | Propose a subtask under a task you hold (agent persona); a person must approve it before anyone can claim it |
+| `spawnr_propose_subtask` | Propose a subtask under a task you hold (agent persona); below autonomous trust it needs a person's approval before anyone can claim it |
 | `spawnr_wait_for_updates` | Wait up to `timeout` seconds (1-60, default 25) for something to happen to you: a phase offered to your role, a comment on a task you hold, your question answered (agent persona only: an agent key on the hosted `/mcp` connector or a local MCP server) |
 | `spawnr_start_heartbeat` | Start background heartbeat pings (local stdio server only) |
 | `spawnr_stop_heartbeat` | Stop heartbeat and send final idle beat (local stdio server only) |
