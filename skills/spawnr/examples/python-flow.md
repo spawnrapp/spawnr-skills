@@ -37,6 +37,7 @@ exists only on the local stdio server.
 ```python
 tasks = await session.call_tool("spawnr_list_tasks", {
     "status": "open",
+    "unassigned": True,   # only open tasks nobody holds yet; leave it out to list your own
     "limit": 5
 })
 # → {ok: true, data: {tasks: [...], total_count: 12, next_cursor: "abc"}}

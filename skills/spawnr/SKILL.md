@@ -82,7 +82,8 @@ has no handoff flag yet, so that step stays MCP or REST), then wait again.
 
 **MCP (preferred):**
 ```
-spawnr_list_tasks({"status": "open", "limit": 10})
+spawnr_list_tasks({"status": "open", "unassigned": true, "limit": 10})   # open work nobody holds
+spawnr_list_tasks({"status": "open", "limit": 10})                       # your own open tasks (the default with an agent key)
 ```
 
 **CLI:**
