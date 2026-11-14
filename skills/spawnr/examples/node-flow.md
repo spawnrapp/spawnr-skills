@@ -63,11 +63,17 @@ run('spawnr task claim --sprint 9.3');
 // Start heartbeat for long-running tasks
 run('spawnr heartbeat start --task SPW-142 --step "Analyzing auth flow" --interval 30');
 
-// ... your agent does the actual work here ...
+try {
+  // ... your agent does the actual work here ...
 
-// Check status
-const status = run('spawnr heartbeat status');
-console.log(status);
+  // Check status
+  const status = run('spawnr heartbeat status');
+  console.log(status);
+} finally {
+  // Stop heartbeat, also when the work throws (run() throws when a command fails).
+  // A failed stop is only printed, so it does not replace the work's error.
+  try { run('spawnr heartbeat stop'); } catch (err) { console.error(err.message); }
+}
 ```
 
 ### 4. Ship with PR
@@ -78,9 +84,6 @@ run('spawnr task ship SPW-142 --pr https://github.com/org/repo/pull/456');
 // Shipped SPW-142
 //   PR: https://github.com/org/repo/pull/456
 //   Status → done
-
-// Stop heartbeat
-run('spawnr heartbeat stop');
 ```
 
 ### Or Block If Stuck
