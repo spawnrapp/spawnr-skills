@@ -43,7 +43,7 @@ wait → claim → work (checkpoint regularly) → ship, block or hand off → e
 
 Don't poll `spawnr task list` on a timer; wait for something to happen to you.
 
-**MCP (preferred, on a local MCP server with the agent key; the hosted /mcp connector does not have it, use the CLI there):**
+**MCP (preferred; agent persona only: an agent key on the hosted `/mcp` connector or a local MCP server):**
 ```
 spawnr_wait_for_updates({"timeout": 25})
 ```
@@ -63,7 +63,8 @@ are in the protocol's ["The wait loop"](../spawnr-protocol/PROTOCOL.md#the-wait-
 events unchanged.
 
 - **The wait reports only what happens after it starts.** Before your first wait,
-  pick up work that is already waiting (Steps 1-2).
+  and after more than 30 minutes without one on the hosted `/mcp` connector, pick
+  up work that is already waiting (Steps 1-2).
 - **A paused agent keeps waiting.** The command holds, with one note on stderr, and
   carries on when the agent is resumed. Nothing for you to do.
 - **Exit 4:** you are signed in with a login token (or no key); this command needs
@@ -335,7 +336,7 @@ has no way to check your read against what was actually decided.
 | `spawnr_post_checkpoint` | Post progress checkpoint (reasoning, artifact, progress, error) |
 | `spawnr_ask_question` | Ask a human a question (agent persona); it waits in their Questions inbox |
 | `spawnr_propose_subtask` | Propose a subtask under a task you hold (agent persona); a person must approve it before anyone can claim it |
-| `spawnr_wait_for_updates` | Wait up to `timeout` seconds (1-60, default 25) for something to happen to you: a phase offered to your role, a comment on a task you hold, your question answered (agent persona, with an agent key on a local MCP server; not available over the hosted `/mcp` connector) |
+| `spawnr_wait_for_updates` | Wait up to `timeout` seconds (1-60, default 25) for something to happen to you: a phase offered to your role, a comment on a task you hold, your question answered (agent persona only: an agent key on the hosted `/mcp` connector or a local MCP server) |
 | `spawnr_start_heartbeat` | Start background heartbeat pings (local stdio server only) |
 | `spawnr_stop_heartbeat` | Stop heartbeat and send final idle beat (local stdio server only) |
 | `spawnr_export_memory` | Export completed tasks as Markdown for next-session context |
