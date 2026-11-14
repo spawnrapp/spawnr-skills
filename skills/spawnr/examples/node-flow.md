@@ -33,12 +33,12 @@ function runJSON(cmd) {
 ### 1. List Open Tasks
 
 ```javascript
-// Pretty table output
+// Pretty table output of your open tasks
 run('spawnr task list --status todo --limit 10');
 
 // Machine-readable
 const { tasks } = runJSON('spawnr task list --status todo');
-console.log(`Found ${tasks.length} open tasks (first page)`);
+console.log(`Found ${tasks.length} of your open tasks (first page)`);
 
 // Pick the first one
 const task = tasks[0];
