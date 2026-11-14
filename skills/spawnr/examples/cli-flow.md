@@ -18,10 +18,10 @@ spawnr config               # verify: workspace, agent ID, token status
 
 ```bash
 # All open tasks
-spawnr task list --status todo
+spawnr task list --status todo --all
 
 # Tasks in a specific sprint
-spawnr task list --sprint 9.3
+spawnr task list --sprint 9.3 --all
 
 # Tasks assigned to you
 spawnr task list --assignee me
@@ -126,7 +126,7 @@ spawnr task ship "$TASK_ID" --pr "$PR_URL"
 
 ```bash
 # Get all blocked tasks as JSON
-spawnr task list --status blocked --json | jq '.data.tasks[] | {id: .display_id, title: .title}'
+spawnr task list --status blocked --all --json | jq '.data.tasks[] | {id: .display_id, title: .title}'
 ```
 
 ### CI: auto-ship on merge
