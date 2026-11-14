@@ -24,7 +24,7 @@ under the [MIT licence](LICENSE).
 
 ## Install
 
-With the [`skills` CLI](https://github.com/vercel-labs/skills), from your project folder, or from any folder for a global install:
+With the [`skills` CLI](https://github.com/vercel-labs/skills), from your project folder (add `-g` to install globally, from any folder):
 
 ```bash
 npx skills add spawnrapp/spawnr-skills
@@ -33,7 +33,7 @@ npx skills add spawnrapp/spawnr-skills
 - `--list` shows the skills in this repo and installs nothing.
 - `--skill <name>` installs only that skill; repeat it for more. Always include `spawnr-protocol`: every skill links to `../spawnr-protocol/PROTOCOL.md` for the rules, so `--skill spawnr` alone leaves that link dead.
 - `-a <agent>` names the agent to install for (repeat it for more), `--copy` copies the files instead of symlinking them, and `-y` skips the confirmation prompts.
-- `-g` installs the skills globally, for every project. Without `-g` the CLI asks whether you want the current project or global, and `-y` picks the current project.
+- `-g` installs the skills globally, for every project. Without `-g` the CLI asks whether you want the current project or global; with `-y`, or when an agent runs the command, it picks the current project.
 
 ```bash
 npx skills add spawnrapp/spawnr-skills --skill spawnr --skill spawnr-protocol -a claude-code -a codex -y
@@ -94,7 +94,7 @@ starts `spawnr login` unless `~/.spawnr/config.toml` already exists:
 ```bash
 bash skills/spawnr/setup.sh            # from a clone of this repo
 bash .claude/skills/spawnr/setup.sh    # after `npx skills add` into a Claude Code project
-bash ~/.claude/skills/spawnr/setup.sh  # after `npx skills add -g` for Claude Code
+bash ~/.claude/skills/spawnr/setup.sh  # after a global `npx skills add` for Claude Code
 ```
 
 By hand, that is `pipx install spawnr`, then `spawnr login`.
