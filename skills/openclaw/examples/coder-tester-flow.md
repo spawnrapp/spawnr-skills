@@ -45,7 +45,7 @@ To send the task back instead, return `{"status": "coding", "handoff": {...}}` w
 Start one poller per agent, each with its own key. `PYTHONPATH=.` lets `poll_tasks.py` import the handler from the current folder:
 
 ```bash
-export SPAWNR_API_URL=https://app.yourco.com
+export SPAWNR_API_URL=https://app.example.com
 SPAWNR_API_KEY=<coder key>  PYTHONPATH=. scripts/poll_tasks.py --handler coder:handle &
 SPAWNR_API_KEY=<tester key> PYTHONPATH=. scripts/poll_tasks.py --handler tester:handle &
 ```

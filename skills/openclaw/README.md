@@ -30,19 +30,28 @@ about "my Spawnr tasks", task IDs, the wait loop, etc.
 
 ### Claude Agent SDK
 
-Point your agent's skill loader at the directory:
+Copy the skill to `.claude/skills/openclaw`, and `spawnr-protocol` beside it
+(the skill links to its [`PROTOCOL.md`](../spawnr-protocol/PROTOCOL.md) for the
+rules), as above, then load it through `ClaudeAgentOptions`:
 
 ```python
-from claude_agent_sdk import Agent
+import asyncio
+from claude_agent_sdk import query, ClaudeAgentOptions
 
-agent = Agent(
-    skills=["./skills/openclaw"],
-    # ... the rest of your agent config
-)
+async def main():
+    options = ClaudeAgentOptions(
+        cwd=".",  # .claude/skills/ here or in a parent directory
+        setting_sources=["user", "project"],  # skills load from the filesystem
+        skills=["openclaw"],  # or "all"
+        allowed_tools=["Read", "Bash"],
+    )
+    async for message in query(prompt="List my Spawnr tasks", options=options):
+        print(message)
+
+asyncio.run(main())
 ```
 
-Keep `skills/spawnr-protocol` beside it: the skill links to
-[`PROTOCOL.md`](../spawnr-protocol/PROTOCOL.md) for the rules.
+Omit `"project"` from `setting_sources` and the skills do not load.
 
 ### Raw scripts (no Claude at all)
 
@@ -55,8 +64,8 @@ The agent owner sets these once when registering the Spawnr agent:
 
 | Variable | Required | Example |
 | --- | --- | --- |
-| `SPAWNR_API_URL` | yes | `https://app.yourco.com` (the same value the `spawnr` CLI reads) |
-| `SPAWNR_API_KEY` | yes | `spawnr_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx` |
+| `SPAWNR_API_URL` | yes | `https://app.example.com` (the same value the `spawnr` CLI reads) |
+| `SPAWNR_API_KEY` | yes | `spawnr-xxxxxxxxxxxxxxxxxxxxxxxx` |
 | `SPAWNR_WORKSPACE_ID` | no | narrows list calls to a single workspace |
 
 A trailing `/api/v1` on `SPAWNR_API_URL` is accepted and ignored, so setups
@@ -71,8 +80,8 @@ Kubernetes Secret, GitHub Actions secret, or equivalent. Never commit it.
 Verify connectivity:
 
 ```bash
-export SPAWNR_API_URL=https://app.yourco.com
-export SPAWNR_API_KEY=spawnr_live_xxxxxxxxxxxx
+export SPAWNR_API_URL=https://app.example.com
+export SPAWNR_API_KEY=spawnr-xxxxxxxxxxxx
 
 ./scripts/spawnr_client.py whoami
 ```
@@ -147,16 +156,12 @@ task comment instead of a status change, and warns on stderr naming the
 task. A single task's transition failing this way (or 422ing/5xxing outright)
 never stops the loop — every other queued task still gets processed.
 
-Claiming ALSO refuses a target the backend's dependency execution gate
-(`enforce_can_start`) wouldn't recognise — that gate only fires on a
-transition into `in_progress`/`in_review`, so a workflow whose "active"
-status is named something else would otherwise start work with the gate
-silently skipped. **`bug/default` is the concrete case**: its only active
-status is `fixing`, which is a legal workflow transition but not a
-gate-recognised one, so the poller currently claims **nothing** on
-`bug/default` boards — it warns on stderr rather than risk starting
-dependency-blocked work unattended. This is intentional and will stay true
-until the backend gate becomes workflow-aware.
+The poller skips a task `/tasks/mine` reports as dependency-blocked, and the
+backend's dependency gate covers a workflow's own active status, so on
+`bug/default` a `triaged` bug is claimed through `triaged → fixing`. A `new` bug
+is not claimed: `bug/default` lets only an Owner, Admin or Manager move it to
+`triaged`, and the server checks an agent's status change as a Member's, so the
+bug stays `new`, with a warning on stderr each round, until a person triages it.
 
 Your handler receives the task dict and returns the result:
 
@@ -190,8 +195,10 @@ real one.
 ## Safety reminders
 
 Treat `SPAWNR_API_KEY` as a secret. Don't print it in logs, chat transcripts,
-or commit it to a repo. If it leaks, rotate via
-`POST /api/v1/agents/<agent_id>/rotate-key` from the dashboard session.
+or commit it to a repo. If it leaks, rotate it: open Agents, then the agent,
+then Connect, and use "Rotate key & reveal", or run
+`spawnr agent rotate-key <agent-id>`. Rotating revokes the old key at once, so
+every client using it is disconnected until you give it the new key.
 
 The skill never reassigns a task: the only assignee it writes is the agent
 itself, when `poll_tasks.py` claims a phase offered to its role. Reassignment is a
