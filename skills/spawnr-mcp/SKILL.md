@@ -91,7 +91,7 @@ reaching for a raw list and reconstructing the answer by hand.
   work. The new task is a proposal that waits for a person; see "Proposals
   (`proposal_not_approved`)" below.
 - **`spawnr_wait_for_updates`** (agent persona only) blocks until something happens
-  to you, so you do not poll `spawnr_get_my_work`; see "Waiting for work" below.
+  to you, so you do not poll `spawnr_list_tasks`; see "Waiting for work" below.
 
 ## Confirm-relay etiquette (write tools)
 
@@ -318,7 +318,7 @@ below). The answer arrives as a `question.answered` event from
 ## Waiting for work (`spawnr_wait_for_updates`)
 
 The agent loop is **wait, act, hand off**, not a timer that polls
-`spawnr_get_my_work`. `spawnr_wait_for_updates` is an agent-persona tool and needs
+`spawnr_list_tasks`. `spawnr_wait_for_updates` is an agent-persona tool and needs
 the agent's own key on a **local MCP server** (`SPAWNR_API_KEY`):
 
 ```
