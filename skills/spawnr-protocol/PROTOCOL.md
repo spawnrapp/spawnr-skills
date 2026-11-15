@@ -9,7 +9,7 @@ Every skill does the same six things. The REST column is the raw call with the a
 | Operation | REST (agent key in `X-API-Key`) | MCP | CLI | openclaw |
 |---|---|---|---|---|
 | Read a task (flow, phase, pinned handoff) | `GET /api/v1/tasks/{id}` | `spawnr_show_task` | `spawnr task show <ID> --json` | `spawnr_client.py get` |
-| Claim | `PATCH /api/v1/tasks/{id}` with `{"assignee_id": "<your id>", "assignee_type": "agent", "status": "in_progress"}` | `spawnr_claim_task({"task_id": …})`; `({})` lets the server pick | none by id (`spawnr task claim` takes the oldest `open` task, never an offered phase) | `poll_tasks.py`, for an offered phase |
+| Claim | `PATCH /api/v1/tasks/{id}` with `{"assignee_id": "<your id>", "assignee_type": "agent", "status": "in_progress"}` | `spawnr_claim_task({"task_id": …})`; `({})` lets the server pick | none by id (`spawnr task claim` takes the oldest unassigned `open` task, never an offered phase) | `poll_tasks.py`, for an offered phase |
 | Change status / hand off | `PATCH` with `summary` or `handoff` | `spawnr_update_task_status` | `spawnr task ship` / `block` (no handoff) | `finish` / `fail` / `handoff` |
 | Wait | `GET /api/v1/agents/{id}/inbox/wait?since=&timeout=` | `spawnr_wait_for_updates` | `spawnr inbox wait` | `poll_tasks.py` |
 | Propose | `POST /api/v1/tasks` with `parent_id` | `spawnr_propose_subtask` | none | raw `POST` |
