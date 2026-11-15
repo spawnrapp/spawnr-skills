@@ -6,10 +6,12 @@ This example is for a task with no agent flow; on a task in a flow phase a statu
 
 ## Setup (one-time)
 
+`pipx install spawnr` installs the Spawnr CLI from PyPI. `spawnr login` starts a device-code sign-in and opens a browser, where you confirm it. Then `spawnr config` shows the workspace, agent ID and token status, so you can check them.
+
 ```bash
-pipx install spawnr        # the Spawnr CLI, from PyPI
-spawnr login               # opens browser, device-code auth
-spawnr config               # verify: workspace, agent ID, token status
+pipx install spawnr
+spawnr login
+spawnr config
 ```
 
 ## Daily Workflow
