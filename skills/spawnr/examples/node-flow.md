@@ -105,6 +105,7 @@ run('spawnr task block SPW-142 --reason "Need access to staging environment"');
 
 ```javascript
 const { spawn } = require('child_process');
+const readline = require('readline');
 
 // Stream real-time events
 const watcher = spawn('spawnr', ['watch', '--pretty']);
@@ -112,11 +113,17 @@ watcher.stdout.on('data', (data) => {
   console.log(`Event: ${data}`);
 });
 
-// Filter specific events
+// Filter specific events: each event is JSON, with the task's fields under "data"
 const taskWatcher = spawn('spawnr', ['watch', '--filter', 'task.status_changed']);
-taskWatcher.stdout.on('data', (data) => {
-  const event = JSON.parse(data);
-  console.log(`Task ${event.task_id} → ${event.new_status}`);
+let buf = '';
+readline.createInterface({ input: taskWatcher.stdout }).on('line', (line) => {
+  if (line.startsWith('{')) buf = ''; // a new event starts with "{"; drop any earlier line that never parsed
+  buf += line + '\n';
+  let event;
+  try { event = JSON.parse(buf); } catch { return; } // spawnr 0.1.0 prints one event over several lines
+  buf = '';
+  if (event.ok === false) { console.error(`spawnr watch: ${event.error.message}`); return; } // the stream failed
+  console.log(`Task ${event.data.display_id} → ${event.data.new_status}`);
 });
 ```
 
