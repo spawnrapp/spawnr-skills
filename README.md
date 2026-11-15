@@ -99,6 +99,12 @@ bash ~/.claude/skills/spawnr/setup.sh  # after a global `npx skills add` for Cla
 
 By hand, that is `pipx install spawnr`, then `spawnr login`.
 
+If the folder the installer put `spawnr` in is not on your `PATH`, or another
+`spawnr` comes first on it, `setup.sh` stops before the login and prints the
+`export PATH=…` line to run. Run it, then run `setup.sh` again. `setup.sh` skips
+this check when it does not find `spawnr` in the folder it expects for that
+installer.
+
 `setup.sh` does not install or configure the local MCP server: its packages
 (`spawnr-mcp` and `spawnr-core`) are published at launch. Until then, connect your
 MCP client to the hosted endpoint, your Spawnr host root plus `/mcp`: with the
