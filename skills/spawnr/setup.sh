@@ -49,19 +49,28 @@ else
     # that would fetch whatever package squats them.
     if command -v pipx &>/dev/null; then
         pipx install spawnr
+        BIN="${PIPX_BIN_DIR:-$HOME/.local/bin}"   # pipx's bin folder (pipx 1.0 has no 'pipx environment')
     elif command -v uv &>/dev/null; then
         uv tool install spawnr
+        BIN=$(uv tool dir --bin 2>/dev/null || true)
     elif command -v pip3 &>/dev/null || command -v pip &>/dev/null; then
         PIP=$(command -v pip3 || command -v pip)
         if [[ -n "${VIRTUAL_ENV:-}" ]]; then
             "$PIP" install spawnr   # --user is refused inside a virtualenv
+            BIN="$VIRTUAL_ENV/bin"
         else
             "$PIP" install --user spawnr
+            BIN="$(python3 -m site --user-base 2>/dev/null || true)/bin"
         fi
     else
         die "No installer found. Install pipx (https://pipx.pypa.io), then run this again."
     fi
     log "CLI installed. For MCP, point your MCP client at your Spawnr host root plus /mcp (agent: X-API-Key header; you: OAuth sign-in); spawnr-mcp (the local MCP server) is not on PyPI yet, so it is not installed."
+    # Stop before the login unless `spawnr` on PATH is the copy just installed (spawnr-skills#78).
+    # If $BIN holds no spawnr (an unusual setup), log in by name as before.
+    if [[ -x "$BIN/spawnr" && ! "$(command -v spawnr)" -ef "$BIN/spawnr" ]]; then
+        die "spawnr is installed in $BIN, but that folder is not on your PATH or another spawnr comes first. Run 'export PATH=\"$BIN:\$PATH\"' (add that line to your shell profile to keep it), then run this again."
+    fi
 fi
 
 # ── Configure MCP for Claude Code (local dev only) ──────────────────────────
