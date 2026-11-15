@@ -35,7 +35,7 @@ spawnr task list --json --limit 50
 ### Claim and start working
 
 ```bash
-# Auto-claim the next open task (highest priority, oldest first)
+# Claim the oldest open, unassigned task
 spawnr task claim
 
 # Claim from a specific sprint
