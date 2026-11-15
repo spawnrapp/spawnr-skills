@@ -42,7 +42,11 @@ console.log(`Found ${tasks.length} of your open tasks (first page)`);
 
 // Pick the first one
 const task = tasks[0];
-console.log(`Working on: ${task.display_id} — ${task.title}`);
+if (task) {
+  console.log(`Working on ${task.display_id}: ${task.title}`);
+} else {
+  console.log('No open tasks of yours; step 2 claims the next unassigned one');
+}
 ```
 
 ### 2. Claim a Task
