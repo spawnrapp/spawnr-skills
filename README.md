@@ -101,9 +101,10 @@ By hand, that is `pipx install spawnr`, then `spawnr login`.
 
 If the folder the installer put `spawnr` in is not on your `PATH`, or another
 `spawnr` comes first on it, `setup.sh` stops before the login and prints the
-`export PATH=…` line to run. Run it, then run `setup.sh` again. `setup.sh` skips
-this check when it does not find `spawnr` in the folder it expects for that
-installer.
+`export PATH=…` line to run. Run it, then run `setup.sh` again. When `setup.sh`
+does not find `spawnr` in the folder it expects for that installer, it stops
+only if no `spawnr` is on your `PATH` at all: add the folder the installer put
+`spawnr` in to `PATH`, then run `spawnr login`.
 
 `setup.sh` does not install or configure the local MCP server: its packages
 (`spawnr-mcp` and `spawnr-core`) are published at launch. Until then, connect your
