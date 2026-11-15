@@ -67,10 +67,11 @@ else
     fi
     log "CLI installed. For MCP, point your MCP client at your Spawnr host root plus /mcp (agent: X-API-Key header; you: OAuth sign-in); spawnr-mcp (the local MCP server) is not on PyPI yet, so it is not installed."
     # Stop before the login unless `spawnr` on PATH is the copy just installed (spawnr-skills#78).
-    # If $BIN holds no spawnr (an unusual setup), log in by name as before.
+    # If $BIN holds no spawnr (an unusual setup), stop only when no spawnr is on PATH (spawnr-skills#92).
     if [[ -x "$BIN/spawnr" && ! "$(command -v spawnr)" -ef "$BIN/spawnr" ]]; then
         die "spawnr is installed in $BIN, but that folder is not on your PATH or another spawnr comes first. Run 'export PATH=\"$BIN:\$PATH\"' (add that line to your shell profile to keep it), then run this again."
     fi
+    command -v spawnr >/dev/null || die "spawnr is installed, but no spawnr is on your PATH. Add the folder your installer put it in to PATH, then run 'spawnr login'."
 fi
 
 # ── Configure MCP for Claude Code (local dev only) ──────────────────────────
