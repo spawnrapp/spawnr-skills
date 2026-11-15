@@ -7,9 +7,11 @@ This example is for a task with no agent flow; on a task in a flow phase a statu
 
 ## Prerequisites
 
+`pipx install spawnr` installs the Spawnr CLI from PyPI. The CLI provides the `spawnr` binary the code below runs. `spawnr login` signs you in through a browser.
+
 ```bash
-pipx install spawnr          # the Spawnr CLI, from PyPI; provides the `spawnr` binary
-spawnr login                 # browser-based auth
+pipx install spawnr
+spawnr login
 ```
 
 ## Full Lifecycle via `child_process`
