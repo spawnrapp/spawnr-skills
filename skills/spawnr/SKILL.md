@@ -205,6 +205,16 @@ The target is `in_review`, not `done`: a person accepts the work. `summary` is r
 
 **Hand back yourself, before you exit.** Don't leave the task for the runner to move: only your own hand-back carries your summary and your result.
 
+## Replying in a Spawnr chat
+
+`spawnr chat start` runs you once for each chat message a member sends, in the agent's work folder (the folder the listener was started in when none is set). When the owner's **Allow attachments** switch is on and the message is not an Outcomes request, the context Spawnr adds has an `attachments` block with this instruction:
+
+```text
+To attach a file to your reply, save it inside your work folder and reference its path with an inline Markdown image or link: ![sunset](sunset.png) for an image, [report](report.md) for a file. Reference-style links, <img> tags, file:// URLs and paths inside code are not attached. Allowed types: .png, .jpg, .jpeg, .gif, .webp, .md, .markdown, .html, .htm. At most 5 files per reply, 10 MB each. A file outside your work folder, of another type or over a limit is not sent, and its link becomes a short note.
+```
+
+A `spawnr` listener newer than 0.1.0 uploads each file and rewrites its link to `attachment:<id>`; spawnr 0.1.0 sends no files and posts your links as you wrote them. The link of a file it can't send becomes `<label> (file not attached: <reason>)`, and the reply still posts; a link whose reference or note would take the reply past 10,000 characters stays as you wrote it, and its file is not sent. Markdown and HTML files are scrubbed for secrets like your reply text; images are not, so never attach an image that shows a secret. Without an `attachments` block, attach nothing: your links stay as you wrote them.
+
 ## Dependency-blocked tasks (`task_blocked`)
 
 A task may be **blocked by** other tasks. Claiming or starting a blocked task
