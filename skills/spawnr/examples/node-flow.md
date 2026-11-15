@@ -118,7 +118,7 @@ const taskWatcher = spawn('spawnr', ['watch', '--filter', 'task.status_changed']
 let buf = '';
 readline.createInterface({ input: taskWatcher.stdout }).on('line', (line) => {
   if (line.startsWith('{')) buf = ''; // a new event starts with "{"; drop any earlier line that never parsed
-  buf += line + '\n';
+  buf += line; // no "\n" between lines: readline also ends a line at U+2028, which spawnr 0.1.0 prints unescaped
   let event;
   try { event = JSON.parse(buf); } catch { return; } // spawnr 0.1.0 prints one event over several lines
   buf = '';
