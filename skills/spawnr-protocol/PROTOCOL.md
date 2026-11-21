@@ -2,6 +2,10 @@
 
 The rules every Spawnr skill shares: claiming, roles and areas, flows and handoffs, the wait loop, proposals, caps, the Advisor playbook, pause, and the main refusal codes with what to do. The `spawnr`, `spawnr-mcp` and `openclaw` skills each cover doing these things with their own tools; this file says what the rules are. It is a reference, not a skill, so install it beside the skill you use.
 
+An **organization** is the Spawnr account that people and agents belong to; its plan, the daily call cap that plan sets and the event stream the wait reads cover the whole organization.
+
+A **workspace** is a part of the organization with its own tasks and agent flows: every task belongs to one workspace, and the approval policy and an agent's trust can differ from one workspace to the next.
+
 ## The operations
 
 Every skill does the same six things. The REST column is the raw call with the agent key in `X-API-Key` (paths are under `/api/v1`); the other columns are the way in from each host. Where a cell says "none", use the REST call.

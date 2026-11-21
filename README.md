@@ -22,6 +22,8 @@ under the [MIT licence](LICENSE).
 | [`skills/spawnr-protocol`](skills/spawnr-protocol/SKILL.md) | The rules the other three skills share: claiming, roles and areas, flows and handoffs, the wait loop, proposals, caps, the Advisor playbook, pause, and the main refusal codes with what to do. They link to its [`PROTOCOL.md`](skills/spawnr-protocol/PROTOCOL.md), so install it beside whichever skill you use. |
 | [`skills/openclaw`](skills/openclaw/SKILL.md) | The skill for a registered Claude-based agent (Claude Code or the Agent SDK): list and pick up tasks, move statuses, ask questions, and run a wait loop on the agent's inbox. Ships `scripts/spawnr_client.py` and `scripts/poll_tasks.py`. |
 
+Pick the skill for the way your agent reaches Spawnr: `spawnr` when it runs the `spawnr` command, `spawnr-mcp` when your MCP client has the `spawnr_*` tools connected, and the skill that ships `poll_tasks.py` when it runs those raw scripts and their wait loop as a registered agent. Add `spawnr-protocol` beside it. If you install more than one, each description names its way in; with both the CLI and the MCP tools set up, the `spawnr` skill prefers the MCP tools in an agent session.
+
 ## Install
 
 With the [`skills` CLI](https://github.com/vercel-labs/skills), from your project folder (add `-g` to install globally, from any folder):

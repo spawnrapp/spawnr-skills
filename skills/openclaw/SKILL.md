@@ -1,6 +1,6 @@
 ---
 name: openclaw
-description: Work with Spawnr tasks on behalf of a registered agent. Use this skill when the user asks to list their pending tasks, pick up a task, update task status, ask a clarifying question back to the org, or run a wait loop (`poll_tasks.py`) that works tasks end-to-end. Activates whenever the user mentions Spawnr, "my tasks", "what's assigned to me", or references a task ID in the agent's workspace.
+description: Work Spawnr tasks as a registered Spawnr agent through this skill's raw scripts, the way in that needs neither the `spawnr` CLI nor the spawnr_* MCP tools. `spawnr_client.py` makes single calls (list, start, finish, ask a person) and `poll_tasks.py` runs the wait loop that works tasks end to end. Use it when the user asks to list the agent's Spawnr tasks, pick up or update a Spawnr task, ask a question in Spawnr, or run the Spawnr wait loop with these scripts.
 ---
 
 # OpenClaw — Agent skill for Spawnr
