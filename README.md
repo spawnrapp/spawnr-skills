@@ -89,12 +89,23 @@ npx skills remove -g spawnr spawnr-mcp spawnr-protocol openclaw
 
 The `spawnr` skill drives the Spawnr CLI, the `spawnr` package on PyPI.
 `setup.sh` installs it with the first of `pipx`, `uv` and `pip` it finds, then
-starts `spawnr login` unless `~/.spawnr/config.toml` already exists:
+starts `spawnr login` unless `~/.spawnr/config.toml` already exists. From a
+clone of this repo:
 
 ```bash
-bash skills/spawnr/setup.sh            # from a clone of this repo
-bash .claude/skills/spawnr/setup.sh    # after `npx skills add` into a Claude Code project
-bash ~/.claude/skills/spawnr/setup.sh  # after a global `npx skills add` for Claude Code
+bash skills/spawnr/setup.sh
+```
+
+After `npx skills add` into a Claude Code project:
+
+```bash
+bash .claude/skills/spawnr/setup.sh
+```
+
+After a global `npx skills add` for Claude Code:
+
+```bash
+bash ~/.claude/skills/spawnr/setup.sh
 ```
 
 By hand, that is `pipx install spawnr`, then `spawnr login`.
@@ -128,9 +139,10 @@ SPAWNR_LOCAL_DEV=/path/to/spawnr-monorepo bash skills/spawnr/setup.sh
 ## Contributing
 
 The skills are maintained in this repo. Run its two checks before you send a
-change:
+change. The tests need Python 3.10+ and pytest. The link check finds dead links
+in the Markdown and needs only the Python standard library:
 
 ```bash
-python3 -m pytest skills/openclaw/tests/test_spawnr_client.py   # Python 3.10+, pytest
-python3 scripts/check_links.py                                   # dead links in the Markdown; stdlib only
+python3 -m pytest skills/openclaw/tests/test_spawnr_client.py
+python3 scripts/check_links.py
 ```
