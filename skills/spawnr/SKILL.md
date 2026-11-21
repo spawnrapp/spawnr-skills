@@ -175,13 +175,19 @@ spawnr_export_memory({"from_date": "2026-08-01"})   # optional date range
 spawnr_export_memory({})                              # everything (capped at 500)
 ```
 
-**REST (no CLI command yet — companion issue tracks `spawnr task memory-export`):**
+**CLI** (spawnr 0.1.0 or later; it sends your agent API key, `SPAWNR_API_KEY` or `spawnr auth set-key`, and a `spawnr login` session is refused):
+```bash
+spawnr task memory-export --from 2026-08-01 --output human
+```
+`--output human` prints the Markdown itself; without it, a script or agent that reads the output gets JSON with the document in `data.markdown`. `--from` and `--to` are optional and bound the date range, and `--out <file>` writes the document to a file instead (`--yes` overwrites an existing one).
+
+**REST fallback:**
 ```bash
 curl https://app.example.com/api/v1/tasks/memory-export \
   -H "X-API-Key: spawnr-<your-key>"
 ```
 
-Both return the same Markdown document — completed (`done`) tasks, newest
+All three return the same Markdown document — completed (`done`) tasks, newest
 first — starting with `# Memory Export — <agent name>`.
 
 ## Dispatched by the runner
@@ -255,8 +261,8 @@ spawnr task dep rm <ID> <BLOCKER>   # remove a dependency edge (resolves a stuck
 
 Every listed task carries its `blocked_state` (`none` / `waiting` / `stuck`); add
 `--json` to read it programmatically. A human can override a blocked start with
-`--force` (agents cannot). Full envelope + remedies live in `docs/error-codes.md`
-(`task_blocked`).
+`--force` (agents cannot). Full envelope + remedies: the protocol's
+["Refusal codes"](../spawnr-protocol/PROTOCOL.md#refusal-codes) (`task_blocked`).
 
 ## Claim refusals with the CLI
 
@@ -308,7 +314,7 @@ just "waiting on X." A **structural** question is different: it touches
 architecture, a destructive or irreversible data operation, security/auth, or
 anything an epic has already locked in as a binding decision. Getting that
 kind of call wrong is expensive, so **cite the source** in `context_note` —
-name the epic decision, the ADR, or the documented behavior you think applies
+name the design decision, the ADR, or the documented behavior you think applies
 or conflicts, don't just restate the question.
 
 Raise it with **`spawnr_ask_question`** over MCP or **`spawnr question ask`**
@@ -322,7 +328,7 @@ spawnr_ask_question({
   "question": "This task wants a second heartbeat daemon per agent so checkpoints can post in parallel — does that conflict with the single-runner-lease design?",
   "context_type": "task",
   "context_ref": "SPW-231",
-  "context_note": "Epic 010 binding decision 2 locks exactly one live lease per agent (runner_lease.py): a second concurrent heartbeat for the same agent identity looks like it would fight the existing lease/takeover logic instead of running alongside it. Confirming before I implement a second heartbeat process.",
+  "context_note": "Decision 2 of the runner design locks exactly one live lease per agent: a second concurrent heartbeat for the same agent identity looks like it would fight the existing lease/takeover logic instead of running alongside it. Confirming before I implement a second heartbeat process.",
   "is_urgent": false
 })
 ```
@@ -331,7 +337,7 @@ spawnr_ask_question({
 ```bash
 spawnr question ask "Does a second heartbeat daemon per agent conflict with the single-runner-lease design?" \
   --task SPW-231 \
-  --context-note "Epic 010 binding decision 2 locks exactly one live lease per agent (runner_lease.py)."
+  --context-note "Decision 2 of the runner design locks exactly one live lease per agent."
 ```
 
 Add `--urgent` to flag it or `--wait` to block until it's answered. The CLI
@@ -339,8 +345,8 @@ has no option flag; a multiple-choice question (`options`) needs the MCP tool.
 
 **Rule:** if the question is about architecture, a destructive/irreversible
 data operation, security/auth, or it bumps into an epic's binding decisions —
-`context_note` MUST name the source ("Epic 010 decision 2", an ADR under
-`docs/adr/`, or the specific documented behavior you're weighing it against).
+`context_note` MUST name the source ("decision 2 of the runner design", your
+project's ADR, or the specific documented behavior you're weighing it against).
 A structural question with no cited source is under-specified: the answerer
 has no way to check your read against what was actually decided.
 

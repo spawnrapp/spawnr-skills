@@ -103,7 +103,7 @@ Each round:
    result dict back: `{"status": "done", "summary": "..."}` or
    `{"status": "blocked", "summary": "..."}`. `summary` is required — the
    backend rejects `done`/`blocked`/`canceled`/`in_review` from an agent
-   caller with no non-empty `summary` (#1130); `description` does not
+   caller with no non-empty `summary`; `description` does not
    satisfy this (it's a different field, and a full replace of the task's
    description, not a note).
 4. Patches the task with the handler's result. A task you already hold in an

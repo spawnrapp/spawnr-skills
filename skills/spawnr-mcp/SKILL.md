@@ -5,7 +5,7 @@ description: Use the Spawnr MCP tools well — pick the right read tool for the 
 
 # Spawnr MCP — Tool-selection etiquette
 
-> Connect once (see `mcp/README.md`), then reach for the right `spawnr_*` tool.
+> Connect once (your Spawnr host root plus `/mcp`), then reach for the right `spawnr_*` tool.
 
 This skill is the companion to the `spawnr` CLI skill. The CLI skill covers the
 command-line workflow; this one covers using the **MCP tools** well from an agent
@@ -35,7 +35,10 @@ Activate this skill when the user wants to:
   pauses every agent in a workspace
 
 It assumes the Spawnr MCP server is already connected. If no `spawnr_*` tools are
-available, set it up first (`mcp/README.md`) — do not guess credentials.
+available, set it up first — do not guess credentials. Connect your MCP client to
+your Spawnr host root plus `/mcp`: with the agent's API key in the `X-API-Key`
+header the agent works as itself, and an OAuth sign-in in the client connects a
+person instead, with the user tools.
 
 ## Personas (read this once)
 
@@ -166,8 +169,8 @@ spawnr_list_tasks({"stuck": true})               # shortcut for stuck only
 
 Every task in a list / detail result carries `blocked_state`
 (`none` / `waiting` / `stuck`) and `unsatisfied_count`, so you can report what is
-holding a task up without a second call. Full envelope + remedies:
-`docs/error-codes.md` (`task_blocked`).
+holding a task up without a second call. Full envelope + remedies: the protocol's
+["Refusal codes"](../spawnr-protocol/PROTOCOL.md#refusal-codes) (`task_blocked`).
 
 ## Refusals over MCP
 
@@ -195,7 +198,7 @@ The agent tools add work only with `spawnr_propose_subtask`, as a child of an
 item you hold (Proposals, below).
 Through an MCP tool, any of these comes back in the same
 `{ok: false, error: {…}}` envelope with the code at `error.code`. A raw REST
-response carries it as the top-level `code`. See `docs/error-codes.md`.
+response carries it as the top-level `code`. See the protocol's ["Refusal codes"](../spawnr-protocol/PROTOCOL.md#refusal-codes).
 
 To pass a task on from the agent persona: on a task with no flow, set it `blocked`
 with a `summary` that says why and who should take it (`spawnr_update_task_status`),
@@ -390,7 +393,7 @@ Both come back on every task `spawnr_list_tasks` and `spawnr_show_task` return. 
 
 **Close it when you're finished.** The routine creates its next task only after this one is closed: `spawnr_update_task_status` to `done` with a `summary` of what you did, or to `canceled` with a `summary` saying why (a task in a flow phase needs a handoff instead), or to any other terminal status of the workspace's workflow, which needs a `summary` too. While the task is still open, `in_progress`, `in_review` or `blocked`, each run that comes due is **skipped**, not queued, and the next task waits for the following scheduled time. Don't leave a routine task in review without a reviewer, and remember that a blocked routine task holds the next run too: nothing new comes until it is closed.
 
-**Only people manage routines.** Routines are created, edited, paused and deleted by people in the dashboard. An agent credential gets `403 AGENT_NOT_PERMITTED` on every `/api/v1/routines` route (AgentTaskTracker#2854), so you cannot create or change one from an agent session. If a routine needs changing, ask a human.
+**Only people manage routines.** Routines are created, edited, paused and deleted by people in the dashboard. An agent credential gets `403 AGENT_NOT_PERMITTED` on every `/api/v1/routines` route, so you cannot create or change one from an agent session. If a routine needs changing, ask a human.
 
 ## Asking Structural Questions
 
@@ -406,7 +409,7 @@ spawnr_ask_question({
   "question": "A partner integration wants its webhook callback token passed as a ?token= query parameter for easier debugging — is that an acceptable exception?",
   "context_type": "task",
   "context_ref": "SPW-405",
-  "context_note": "Epic 013 binding decision 6 (credentials travel in headers only) rejects any credential-shaped query parameter on /mcp, checked by key name alone. This partner design conflicts with that unless there is an explicit carve-out for non-MCP webhook callbacks.",
+  "context_note": "Decision 6 of the auth design (credentials travel in headers only) rejects any credential-shaped query parameter on /mcp, checked by key name alone. This partner design conflicts with that unless there is an explicit carve-out for non-MCP webhook callbacks.",
   "is_urgent": true
 })
 ```
@@ -421,8 +424,8 @@ session ask the human directly in the conversation.
 
 A **structural** question — architecture, a destructive/irreversible data
 operation, security/auth, or anything an epic already locked in as a binding
-decision — MUST cite the source in `context_note`: name the epic decision (as
-above), an ADR under `docs/adr/`, or the exact documented behavior you're
+decision — MUST cite the source in `context_note`: name the design decision (as
+above), your project's ADR, or the exact documented behavior you're
 weighing the task against. Don't just restate the question in `context_note`
 — say what governing decision it seems to bump into.
 
@@ -470,5 +473,6 @@ spawnr_complete_and_reassign({"task_id": "T1", "next_assignee": "user:U2"})
 
 ## Reference
 
-The full per-tool reference (both personas, arguments, read/write) is generated
-from the server and lives in `mcp/README.md` under the **Tools** section.
+The full per-tool reference comes from the server, not this skill: your MCP client
+lists every tool you can call, with its arguments, from the server's `tools/list`
+answer. Each persona sees only its own tools (Personas, above).

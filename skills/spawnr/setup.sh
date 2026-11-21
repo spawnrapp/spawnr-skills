@@ -44,7 +44,7 @@ if [[ -n "${SPAWNR_LOCAL_DEV:-}" ]]; then
     $PIP_CMD install -e "$SPAWNR_LOCAL_DEV/sdks/python-core" -e "$SPAWNR_LOCAL_DEV/mcp"
     log "CLI + MCP installed."
 else
-    # `spawnr` is the CLI's package on PyPI. ISSUE-322: spawnr-mcp and
+    # `spawnr` is the CLI's package on PyPI. spawnr-mcp and
     # spawnr-core are not published, so never install those names from PyPI:
     # that would fetch whatever package squats them.
     if command -v pipx &>/dev/null; then
