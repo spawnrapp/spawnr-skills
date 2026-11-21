@@ -153,7 +153,7 @@ _ACTIONABLE_STATUSES = frozenset({"open", "draft", "ready", "new", "triaged"})
 # the same derived `blocked_state` the gate itself computes, so this script
 # can skip a blocked task BEFORE walking it at all, rather than discovering
 # the block on the last hop. `_BLOCKED_STATES` mirrors the backend's own
-# denial set exactly (`assert_can_start`, `task_blocking.py` —
+# denial set exactly (the server's `assert_can_start` —
 # `{"waiting", "stuck"}`, the same set `is_dependency_blocked` uses), so the
 # listing and the gate can never disagree.
 _BLOCKED_STATES = frozenset({"waiting", "stuck"})
@@ -266,7 +266,7 @@ def _list_actionable_tasks(
 # ---------------------------------------------------------------------------
 
 
-# `GET /workflows/{item_type}` (`app/api/routes/workflows.py`'s `get_workflow`)
+# `GET /workflows/{item_type}` (the server's `get_workflow`)
 # 404s for TWO different reasons with the SAME status code: "Workspace not
 # found" (a scope/visibility problem the caller should hear about loudly)
 # and "No custom workflow for {item_type}. Default (any-to-any) applies."
@@ -297,7 +297,7 @@ def _get_workflow(workspace_id: Optional[str], item_type: str) -> Optional[dict]
     Cached per (workspace_id, item_type) for `_WORKFLOW_CACHE_TTL` seconds —
     one call per board per cache window, not one per task — matching the
     backend's own Redis TTL for the same lookup
-    (`workflows.py`'s `WORKFLOW_CACHE_TTL = 300`).
+    (the server's `WORKFLOW_CACHE_TTL = 300`).
     """
     if not workspace_id:
         # No workspace on the task (legacy data) — nothing to look up.
@@ -322,7 +322,7 @@ def _get_workflow(workspace_id: Optional[str], item_type: str) -> Optional[dict]
 
 
 _workflow_cache: dict[tuple[str, str], tuple[Optional[dict], float]] = {}
-_WORKFLOW_CACHE_TTL = 300  # seconds; mirrors workflows.py's WORKFLOW_CACHE_TTL
+_WORKFLOW_CACHE_TTL = 300  # seconds; mirrors the server's WORKFLOW_CACHE_TTL
 
 
 def _category_of(workflow: dict, status_key: str) -> Optional[str]:
@@ -347,7 +347,7 @@ def _fields_satisfied(task: dict, required_fields: list[dict]) -> bool:
 
 def _role_allows_agent(allowed_roles: list) -> bool:
     """This script runs on an agent key, which the server checks as a Member
-    (`task_update/apply.py`, `task_bulk.py`); `workflow_rules.validate_transition`
+    (the server's task update and bulk update routes); the server's `validate_transition`
     lets a Member take an edge only when `allowed_roles` is empty or names
     Member or Viewer. Pinned against the real check by
     the Spawnr server's test_openclaw_poll_actionable_statuses.py."""
@@ -373,7 +373,7 @@ def _find_transition_path(
       templates) — a single hop straight to any status satisfying
       `is_target`.
     * A status with NO transition object naming it as `from` is ALSO
-      any-to-any FROM THAT STATUS specifically (see workflow_rules.py's "No
+      any-to-any FROM THAT STATUS specifically (see the server's "No
       transitions from this status defined — allow"). Matching the backend
       exactly, that wildcard hop is NOT gated by `required_fields` — no
       transition object exists to hold them. This looks like a bug at
@@ -923,14 +923,14 @@ def _handoff_summary(outcome: dict, handoff_target: str) -> str:
 
 # #1130: an agent (X-API-Key) caller MUST send a non-empty `summary` for any of
 # these statuses, or the PATCH 422s. Duplicated from the backend's
-# AGENT_SUMMARY_REQUIRED_STATUSES (app/api/routes/tasks.py) because this script
+# AGENT_SUMMARY_REQUIRED_STATUSES because this script
 # is stdlib-only and outside the backend package — the copy is pinned by
 # the Spawnr server's test_openclaw_summary_contract.py so it can't drift silently.
 #
 # #1271: this is a FLOOR, not the whole story. The backend's real check
-# (`_resolve_summary_required_statuses`, `app/api/routes/tasks.py`) unions
+# (the server's `_resolve_summary_required_statuses`) unions
 # this floor with the workflow's OWN terminal-category statuses
-# (`workflows.workflow_summary_required_status_keys`) — so a custom workflow
+# (the server's `workflow_summary_required_status_keys`) — so a custom workflow
 # whose terminal status is spelled e.g. `"shipped"`, never one of these four
 # literal names, is STILL summary-required by the backend, and a PATCH into
 # it with no summary still 422s. `_summary_required_statuses` below resolves

@@ -79,7 +79,7 @@ def _request(
     `missing_if_detail_contains` narrows a `treat_as_missing` code further,
     to the response's OWN error text — a code alone can be too coarse.
     `GET /workflows/{item_type}` 404s for TWO different reasons with the
-    SAME status code (`app/api/routes/workflows.py`'s `get_workflow`):
+    SAME status code (the server's `get_workflow`):
     "Workspace not found" (a scope/visibility problem — the caller can't
     see this workspace at all) and "No custom workflow for {item_type}..."
     (a real, safe-to-treat-as-missing case). Conflating them would let a
@@ -167,7 +167,7 @@ def cmd_whoami(_args: argparse.Namespace) -> None:
 # `apply_template` writes them via `update_many` with no validator, so tasks
 # legitimately sit at `draft`/`ready` (story template) or
 # `new`/`triaged`/`fixing`/`closed`/`wont_fix` (bug template) — none of which
-# are in VALID_STATUSES (see the QA-112 note in app/api/routes/workflows.py).
+# are in VALID_STATUSES (see QA-112).
 # That is why `--status` WARNS rather than rejects: this set is a spellcheck
 # hint, never an allowlist.
 #
@@ -225,7 +225,7 @@ def _warn_unknown_status(value: str) -> str:
     ``update_many`` with no validator, so a task legitimately sits at
     ``draft``/``ready`` (story template) or
     ``new``/``triaged``/``fixing``/``closed``/``wont_fix`` (bug template) —
-    see the QA-112 note in ``app/api/routes/workflows.py``. ``/tasks/mine``
+    see QA-112. ``/tasks/mine``
     has no ``type`` filter, so those tasks come back here. QA-122 documents
     the general case: a stored status may sit outside the workspace's own
     workflow set. Exiting 2 on ``--status new`` would break a query that
@@ -450,8 +450,8 @@ def cmd_ask(args: argparse.Namespace) -> None:
     )
 
 
-# UpdateTaskRequest.summary is capped at MAX_COMMENT_LEN (5000, task_comments.py)
-# and CreateQuestionRequest.question at MAX_QUESTION_LEN (5000, questions.py) —
+# The server caps UpdateTaskRequest.summary at MAX_COMMENT_LEN (5000)
+# and CreateQuestionRequest.question at MAX_QUESTION_LEN (5000) —
 # the SAME limit. The overflow comes from the 27-char "Blocked pending an
 # answer: " prefix below: a question at or near its own legal 5000 posts fine,
 # then the prefixed summary exceeds 5000 and 422s the follow-up PATCH — the
@@ -469,8 +469,8 @@ def _block_summary(question: str) -> str:
 def _my_agent_id() -> str:
     """Resolve this agent's own id from `/agents/me`.
 
-    The id `/agents/me` returns is `str(agent["_id"])` (see backend
-    agents.py `get_current_agent`), which is exactly the value the
+    The id `/agents/me` returns is `str(agent["_id"])` (see the server's
+    `get_current_agent`), which is exactly the value the
     `/questions/` list route matches against its stored `agent_id`. Resolving
     it here keeps the "whose questions" decision in one place.
     """
