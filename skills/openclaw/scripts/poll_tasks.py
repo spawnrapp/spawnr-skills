@@ -94,9 +94,9 @@ def _load_handler(spec: str) -> Callable[[dict], dict]:
 
 # #1233: hardcoding "open" left a poller on the bug or story default
 # workflow template with ZERO claimable work, forever — `"open"` is in
-# `VALID_STATUSES` (backend/app/api/routes/tasks.py), the WRITE-accepted
-# vocabulary, but the STORED vocabulary is open-ended: `apply_template`
-# (backend/app/api/routes/workflows.py) `$set`s a template's own statuses via
+# the server's `VALID_STATUSES`, the WRITE-accepted
+# vocabulary, but the STORED vocabulary is open-ended: the server's
+# `apply_template` `$set`s a template's own statuses via
 # `update_many` with no validator, and `GET /tasks/mine` has no `type` filter
 # to exclude them. The built-in templates alone produce `draft`/`ready`
 # (story/default) and `new`/`triaged`/`fixing`/`closed`/`wont_fix`
@@ -105,8 +105,8 @@ def _load_handler(spec: str) -> Callable[[dict], dict]:
 # The honest replacement question is "is this task actionable", not "is it
 # open". This script is stdlib-only and outside the backend package, so it
 # can't ask the workflow engine directly — it approximates by taking every
-# status keyed `"category": "todo"` across the built-in `WORKFLOW_TEMPLATES`
-# (backend/app/api/routes/workflows.py):
+# status keyed `"category": "todo"` across the server's built-in
+# `WORKFLOW_TEMPLATES`:
 #
 #   task/default & task/kanban  -> open
 #   story/default & story/kanban -> draft, ready | open
@@ -132,7 +132,7 @@ def _load_handler(spec: str) -> Callable[[dict], dict]:
 # same failure shape as the bug this fix closes, just for a smaller
 # population. `--statuses` below is the escape hatch for that case.
 #
-# Pinned by backend/tests/test_openclaw_poll_actionable_statuses.py, which
+# Pinned by the Spawnr server's test_openclaw_poll_actionable_statuses.py, which
 # derives the "todo"-category union live from WORKFLOW_TEMPLATES so a new
 # built-in template status fails there instead of quietly starving pollers
 # in the field.
@@ -149,11 +149,11 @@ _ACTIONABLE_STATUSES = frozenset({"open", "draft", "ready", "new", "triaged"})
 # on the final one, leaving it parked at the intermediate status (`ready`)
 # with no reverse transition to undo it. `story/default` defines none.
 #
-# `GET /tasks/mine` (#1256, `backend/app/api/routes/tasks.py`) now carries
+# `GET /tasks/mine` (#1256) now carries
 # the same derived `blocked_state` the gate itself computes, so this script
 # can skip a blocked task BEFORE walking it at all, rather than discovering
 # the block on the last hop. `_BLOCKED_STATES` mirrors the backend's own
-# denial set exactly (`assert_can_start`, `task_blocking.py` —
+# denial set exactly (the server's `assert_can_start` —
 # `{"waiting", "stuck"}`, the same set `is_dependency_blocked` uses), so the
 # listing and the gate can never disagree.
 _BLOCKED_STATES = frozenset({"waiting", "stuck"})
@@ -238,7 +238,7 @@ def _list_actionable_tasks(
 #
 # Listing the right tasks was only half the bug. `_work_task` used to claim
 # with an unconditional `PATCH {"status": "in_progress"}`, and every write
-# goes through `validate_transition` (backend/app/api/routes/workflows.py),
+# goes through the server's `validate_transition`,
 # which enforces whatever workflow the task's own workspace+item_type has —
 # built-in template or custom. Probed against the real WORKFLOW_TEMPLATES:
 #
@@ -266,7 +266,7 @@ def _list_actionable_tasks(
 # ---------------------------------------------------------------------------
 
 
-# `GET /workflows/{item_type}` (`app/api/routes/workflows.py`'s `get_workflow`)
+# `GET /workflows/{item_type}` (the server's `get_workflow`)
 # 404s for TWO different reasons with the SAME status code: "Workspace not
 # found" (a scope/visibility problem the caller should hear about loudly)
 # and "No custom workflow for {item_type}. Default (any-to-any) applies."
@@ -275,7 +275,7 @@ def _list_actionable_tasks(
 # applies", route to the `["in_progress"]` fallback, and get CACHED for
 # `_WORKFLOW_CACHE_TTL` seconds. This substring narrows the signal to the
 # one case that's actually safe. Pinned by
-# backend/tests/test_openclaw_poll_actionable_statuses.py against
+# the Spawnr server's test_openclaw_poll_actionable_statuses.py against
 # `get_workflow`'s real source, so a reworded detail string fails there
 # instead of quietly reopening the conflation (worst case if it drifts:
 # EVERY workflow lookup on a no-template workspace — the common case —
@@ -297,7 +297,7 @@ def _get_workflow(workspace_id: Optional[str], item_type: str) -> Optional[dict]
     Cached per (workspace_id, item_type) for `_WORKFLOW_CACHE_TTL` seconds —
     one call per board per cache window, not one per task — matching the
     backend's own Redis TTL for the same lookup
-    (`workflows.py`'s `WORKFLOW_CACHE_TTL = 300`).
+    (the server's `WORKFLOW_CACHE_TTL = 300`).
     """
     if not workspace_id:
         # No workspace on the task (legacy data) — nothing to look up.
@@ -322,7 +322,7 @@ def _get_workflow(workspace_id: Optional[str], item_type: str) -> Optional[dict]
 
 
 _workflow_cache: dict[tuple[str, str], tuple[Optional[dict], float]] = {}
-_WORKFLOW_CACHE_TTL = 300  # seconds; mirrors workflows.py's WORKFLOW_CACHE_TTL
+_WORKFLOW_CACHE_TTL = 300  # seconds; mirrors the server's WORKFLOW_CACHE_TTL
 
 
 def _category_of(workflow: dict, status_key: str) -> Optional[str]:
@@ -347,10 +347,10 @@ def _fields_satisfied(task: dict, required_fields: list[dict]) -> bool:
 
 def _role_allows_agent(allowed_roles: list) -> bool:
     """This script runs on an agent key, which the server checks as a Member
-    (`task_update/apply.py`, `task_bulk.py`); `workflow_rules.validate_transition`
+    (the server's task update and bulk update routes); the server's `validate_transition`
     lets a Member take an edge only when `allowed_roles` is empty or names
     Member or Viewer. Pinned against the real check by
-    backend/tests/test_openclaw_poll_actionable_statuses.py."""
+    the Spawnr server's test_openclaw_poll_actionable_statuses.py."""
     return not allowed_roles or "Member" in allowed_roles or "Viewer" in allowed_roles
 
 
@@ -361,8 +361,8 @@ def _find_transition_path(
     is_target: Callable[[str], bool],
 ) -> Optional[list[str]]:
     """Shortest legal path of status keys from `from_status` to the nearest
-    status satisfying `is_target`, mirroring `validate_transition`'s own
-    edge semantics (`backend/app/services/workflow_rules.py`) so every path
+    status satisfying `is_target`, mirroring the server's
+    `validate_transition` edge semantics so every path
     this returns is guaranteed PATCH-able:
 
     * `from_status` must be a real status in this workflow. An orphaned
@@ -373,7 +373,7 @@ def _find_transition_path(
       templates) — a single hop straight to any status satisfying
       `is_target`.
     * A status with NO transition object naming it as `from` is ALSO
-      any-to-any FROM THAT STATUS specifically (see workflow_rules.py's "No
+      any-to-any FROM THAT STATUS specifically (the server's own rule: "No
       transitions from this status defined — allow"). Matching the backend
       exactly, that wildcard hop is NOT gated by `required_fields` — no
       transition object exists to hold them. This looks like a bug at
@@ -457,15 +457,15 @@ def _find_transition_path(
     return None
 
 
-# US-006.3's dependency execution gate (`enforce_can_start`,
-# backend/app/services/task_blocking.py) is what stops an agent starting a
+# US-006.3's dependency execution gate (the server's `enforce_can_start`)
+# is what stops an agent starting a
 # dependency-blocked task — and an agent caller can NEVER force past it
 # (`_HUMAN_AUTH_TYPES = {"jwt"}`; `force` is JWT-only). Both PATCH call
 # sites (`update_task`, the bulk-update per-item loop) reach it ONLY via
 # `is_active_transition(old, new)`.
 #
-# #1246 made that gate itself workflow-aware: `task_blocking.
-# gate_active_statuses(workflow_active_statuses)` unions a hardcoded FLOOR
+# #1246 made that gate itself workflow-aware: the server's
+# `gate_active_statuses(workflow_active_statuses)` unions a hardcoded FLOOR
 # (`ACTIVE_STATUSES = {"in_progress", "in_review"}`) with the target
 # workspace+item_type's own workflow-resolved "gate-active" status keys —
 # so a transition into `bug/default`'s `fixing` gates exactly like
@@ -479,12 +479,12 @@ def _find_transition_path(
 # can't import the backend package. Two pieces, matching the backend's own
 # two functions exactly:
 #
-#   `_GATE_ACTIVE_STATUSES_FLOOR` mirrors `task_blocking.ACTIVE_STATUSES` —
+#   `_GATE_ACTIVE_STATUSES_FLOOR` mirrors the server's `ACTIVE_STATUSES` —
 #   the hardcoded minimum, unioned in regardless of workflow.
 #
-#   `_gate_active_statuses(workflow)` mirrors `task_blocking.
-#   gate_active_statuses()` UNIONED with `workflows.workflow_active_status_
-#   keys()`'s own resolution — which is a DENYLIST
+#   `_gate_active_statuses(workflow)` mirrors the server's
+#   `gate_active_statuses()` UNIONED with the server's
+#   `workflow_active_status_keys()` resolution — which is a DENYLIST
 #   (`category not in {"todo", "done"}`), not an allowlist of
 #   `category == "active"`. That distinction is load-bearing: the backend
 #   fails CLOSED toward gating for an unrecognized, missing, or `None`
@@ -492,13 +492,13 @@ def _find_transition_path(
 #   trust a status the backend doesn't actually gate — the exact bypass
 #   #1233's review caught, reopened under a new name.
 #
-# Pinned by backend/tests/test_openclaw_poll_gate_active_statuses.py against
+# Pinned by the Spawnr server's test_openclaw_poll_gate_active_statuses.py against
 # the real `gate_active_statuses` AND the real category-denylist constant,
 # both as values AND as the claim-safety behavior they drive — see
 # `_claim_path` below for how it's used.
 _GATE_ACTIVE_STATUSES_FLOOR = frozenset({"in_progress", "in_review"})
 
-# Mirrors app.api.routes.workflows._KNOWN_INACTIVE_CATEGORIES exactly — the
+# Mirrors the server's `_KNOWN_INACTIVE_CATEGORIES` exactly — the
 # only two categories `workflow_active_status_keys` treats as NOT
 # gate-active. Everything else (an explicit "active", an unrecognized
 # value, a missing key, `None`) counts as gate-active, fail-closed.
@@ -508,13 +508,13 @@ _GATE_INACTIVE_CATEGORIES = frozenset({"todo", "done"})
 def _gate_active_statuses(workflow: Optional[dict]) -> frozenset[str]:
     """The status keys whose ENTRY the backend's dependency execution gate
     actually triggers on, for THIS workflow — mirrors
-    `task_blocking.gate_active_statuses()` exactly:
+    the server's `gate_active_statuses()` exactly:
 
         gate_active_statuses(workflow_active_statuses)
             == ACTIVE_STATUSES | (workflow_active_statuses - {"blocked"})
 
     where `workflow_active_statuses` is itself
-    `workflows.workflow_active_status_keys()`'s result (the category
+    the server's `workflow_active_status_keys()` result (the category
     DENYLIST described above `_GATE_INACTIVE_CATEGORIES`).
 
     `workflow is None` (no custom workflow for this workspace+item_type)
@@ -528,7 +528,7 @@ def _gate_active_statuses(workflow: Optional[dict]) -> frozenset[str]:
     (e.g. `"parked"`) tagged the same way is NOT excluded — the backend's
     carve-out is a literal-string exception, not a semantic "any parking
     status" rule, and this has to match that precisely rather than
-    generalize it. See `task_blocking.gate_active_statuses`'s own
+    generalize it. See the server's `gate_active_statuses`'s own
     docstring for why the carve-out exists at all: gating entry into
     "blocked" would 409 the one caller class (agents) that most needs to
     record a dependency-blocked state, and agents can never `force` past a
@@ -599,7 +599,7 @@ def _claim_path(workflow: Optional[dict], task: dict) -> Optional[list[str]]:
     `bug/default` outright rather than risk that.
 
     #1246 (backend) then made the gate itself workflow-aware
-    (`task_blocking.gate_active_statuses`, mirrored by
+    (the server's `gate_active_statuses`, mirrored by
     `_gate_active_statuses` above), and #1249 made `PATCH /tasks/{id}`
     accept a workflow's own status keys as legal write targets at all.
     Both reasons for the blanket `bug/default` refusal are gone: `fixing`
@@ -751,7 +751,7 @@ def _handoff_candidates(workflow: dict) -> frozenset[str]:
 
     Verified against all six built-in templates
     (`TestHandoffCandidateDerivation` in
-    backend/tests/test_openclaw_poll_actionable_statuses.py):
+    the Spawnr server's test_openclaw_poll_actionable_statuses.py):
 
       task/default, story/default, bug/default -> {"in_review"}: each has
       exactly one "active" status (`in_review`) with a direct edge into a
@@ -923,14 +923,14 @@ def _handoff_summary(outcome: dict, handoff_target: str) -> str:
 
 # #1130: an agent (X-API-Key) caller MUST send a non-empty `summary` for any of
 # these statuses, or the PATCH 422s. Duplicated from the backend's
-# AGENT_SUMMARY_REQUIRED_STATUSES (app/api/routes/tasks.py) because this script
+# AGENT_SUMMARY_REQUIRED_STATUSES because this script
 # is stdlib-only and outside the backend package — the copy is pinned by
-# backend/tests/test_openclaw_summary_contract.py so it can't drift silently.
+# the Spawnr server's test_openclaw_summary_contract.py so it can't drift silently.
 #
 # #1271: this is a FLOOR, not the whole story. The backend's real check
-# (`_resolve_summary_required_statuses`, `app/api/routes/tasks.py`) unions
+# (the server's `_resolve_summary_required_statuses`) unions
 # this floor with the workflow's OWN terminal-category statuses
-# (`workflows.workflow_summary_required_status_keys`) — so a custom workflow
+# (the server's `workflow_summary_required_status_keys`) — so a custom workflow
 # whose terminal status is spelled e.g. `"shipped"`, never one of these four
 # literal names, is STILL summary-required by the backend, and a PATCH into
 # it with no summary still 422s. `_summary_required_statuses` below resolves
@@ -938,7 +938,7 @@ def _handoff_summary(outcome: dict, handoff_target: str) -> str:
 # hardcoded minimum that always applies, workflow or not.
 _SUMMARY_REQUIRED_STATUSES = {"done", "blocked", "canceled", "in_review"}
 
-# Mirrors `app.api.routes.workflows._KNOWN_NON_TERMINAL_CATEGORIES` exactly
+# Mirrors the server's `_KNOWN_NON_TERMINAL_CATEGORIES` exactly
 # — deliberately a SEPARATE constant from `_GATE_INACTIVE_CATEGORIES` above,
 # not a reuse: the two backend predicates disagree on purpose, and that
 # disagreement is load-bearing, not an oversight. `_GATE_INACTIVE_CATEGORIES`
@@ -959,7 +959,7 @@ _NON_TERMINAL_CATEGORIES = frozenset({"todo", "active"})
 def _summary_required_statuses(workflow: Optional[dict]) -> frozenset[str]:
     """The full set of status keys a PATCH into requires a non-empty
     `summary` for, given THIS task's own (workspace, item_type) workflow —
-    mirrors `app.api.routes.tasks._resolve_summary_required_statuses`
+    mirrors the server's `_resolve_summary_required_statuses`
     exactly: the `_SUMMARY_REQUIRED_STATUSES` floor UNIONED with this
     workflow's own terminal-category (non-`_NON_TERMINAL_CATEGORIES`) status
     keys.

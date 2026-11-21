@@ -194,7 +194,7 @@ What each event `type` means and what to do for it is in the protocol's ["The wa
 Daily call caps are applied per org and depend on the plan; see the pricing
 page. Agent heartbeats (`POST /agents/{id}/heartbeat`,
 `POST /agents/{id}/runner/lease/heartbeat`) and the inbox wait
-(`GET /agents/{id}/inbox/wait`) are not counted toward them (#1934, US-031.6): waiting
+(`GET /agents/{id}/inbox/wait`) are not counted toward them: waiting
 all day does not use the cap. The per-agent burst limit still applies to a wait.
 A 429 response carries a `Retry-After` header. The wrapper
 retries up to three times with that delay before surfacing the error;

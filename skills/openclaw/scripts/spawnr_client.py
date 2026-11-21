@@ -79,7 +79,7 @@ def _request(
     `missing_if_detail_contains` narrows a `treat_as_missing` code further,
     to the response's OWN error text — a code alone can be too coarse.
     `GET /workflows/{item_type}` 404s for TWO different reasons with the
-    SAME status code (`app/api/routes/workflows.py`'s `get_workflow`):
+    SAME status code (the server's `get_workflow`):
     "Workspace not found" (a scope/visibility problem — the caller can't
     see this workspace at all) and "No custom workflow for {item_type}..."
     (a real, safe-to-treat-as-missing case). Conflating them would let a
@@ -159,22 +159,22 @@ def cmd_whoami(_args: argparse.Namespace) -> None:
     _print_json(_request("GET", "/agents/me"))
 
 
-# The WRITE-accepted status vocabulary, duplicated from `VALID_STATUSES` in
-# backend/app/api/routes/tasks.py — i.e. what `PATCH /tasks/{id}` accepts.
+# The WRITE-accepted status vocabulary, duplicated from the server's
+# `VALID_STATUSES` — i.e. what `PATCH /tasks/{id}` accepts.
 #
 # It is NOT the set of statuses a task can HAVE. The stored vocabulary is
 # deliberately open-ended: workflow templates carry their own statuses and
 # `apply_template` writes them via `update_many` with no validator, so tasks
 # legitimately sit at `draft`/`ready` (story template) or
 # `new`/`triaged`/`fixing`/`closed`/`wont_fix` (bug template) — none of which
-# are in VALID_STATUSES (see the QA-112 note in app/api/routes/workflows.py).
+# are in VALID_STATUSES (see QA-112).
 # That is why `--status` WARNS rather than rejects: this set is a spellcheck
 # hint, never an allowlist.
 #
 # Script is stdlib-only and can't import the backend (same constraint as
 # `poll_tasks._SUMMARY_REQUIRED_STATUSES` vs `AGENT_SUMMARY_REQUIRED_STATUSES`,
 # #1220), so it's duplicated and pinned by
-# backend/tests/test_openclaw_status_vocabulary.py.
+# the Spawnr server's test_openclaw_status_vocabulary.py.
 _TASK_STATUSES = frozenset(
     {
         # VALID_STATUSES — the write-accepted set.
@@ -198,7 +198,7 @@ _TASK_STATUSES = frozenset(
     }
 )
 
-# `GET /tasks/mine` (see list_my_tasks in backend/app/api/routes/tasks.py)
+# `GET /tasks/mine` (the server's `list_my_tasks`)
 # caps its result at 100 tasks (`.to_list(length=100)`), newest-created
 # first. That cap is independent of `--status` but interacts badly with it:
 # client-side filtering (below) only ever sees the first 100, so an agent
@@ -225,7 +225,7 @@ def _warn_unknown_status(value: str) -> str:
     ``update_many`` with no validator, so a task legitimately sits at
     ``draft``/``ready`` (story template) or
     ``new``/``triaged``/``fixing``/``closed``/``wont_fix`` (bug template) —
-    see the QA-112 note in ``app/api/routes/workflows.py``. ``/tasks/mine``
+    see QA-112. ``/tasks/mine``
     has no ``type`` filter, so those tasks come back here. QA-122 documents
     the general case: a stored status may sit outside the workspace's own
     workflow set. Exiting 2 on ``--status new`` would break a query that
@@ -320,8 +320,8 @@ def _require_nonblank(value: str, flag: str) -> str:
 def _require_within_summary_limit(value: str, flag: str) -> str:
     """Fail with a clear client-side message rather than a raw 422.
 
-    `UpdateTaskRequest.summary` (backend/app/api/routes/tasks.py) is capped
-    at `MAX_COMMENT_LEN` (5000, backend/app/api/routes/task_comments.py) —
+    The server's `UpdateTaskRequest.summary` is capped
+    at `MAX_COMMENT_LEN` (5000) —
     `--note`/`--reason` are posted straight into it by `cmd_finish`/
     `cmd_fail`. Unlike `_block_summary` below, which TRUNCATES because it is
     generating a wrapper string around text it did not author, `--note`/
@@ -342,7 +342,7 @@ def _require_within_summary_limit(value: str, flag: str) -> str:
 
 
 def cmd_finish(args: argparse.Namespace) -> None:
-    # UpdateTaskRequest (backend/app/api/routes/tasks.py) requires a
+    # The server's UpdateTaskRequest requires a
     # non-empty `summary` from an agent (X-API-Key) caller whenever `status`
     # moves to done/blocked/canceled/in_review (#1130) — `description` does
     # NOT satisfy that check, and posting it here would wholesale *replace*
@@ -412,10 +412,9 @@ def cmd_handoff(args: argparse.Namespace) -> None:
 
 
 def cmd_ask(args: argparse.Namespace) -> None:
-    # CreateQuestionRequest (backend/app/api/routes/questions.py) has no
+    # The server's CreateQuestionRequest has no
     # `task_id` field and is `extra="forbid"` — the task linkage is
-    # `context_type` + `context_ref`, per docs/user-guides/
-    # openclaw-onboarding.md's corrected example (#1219).
+    # `context_type` + `context_ref` (#1219).
     body = {
         "question": args.question,
         "context_type": "task",
@@ -451,8 +450,8 @@ def cmd_ask(args: argparse.Namespace) -> None:
     )
 
 
-# UpdateTaskRequest.summary is capped at MAX_COMMENT_LEN (5000, task_comments.py)
-# and CreateQuestionRequest.question at MAX_QUESTION_LEN (5000, questions.py) —
+# The server caps UpdateTaskRequest.summary at MAX_COMMENT_LEN (5000)
+# and CreateQuestionRequest.question at MAX_QUESTION_LEN (5000) —
 # the SAME limit. The overflow comes from the 27-char "Blocked pending an
 # answer: " prefix below: a question at or near its own legal 5000 posts fine,
 # then the prefixed summary exceeds 5000 and 422s the follow-up PATCH — the
@@ -470,8 +469,8 @@ def _block_summary(question: str) -> str:
 def _my_agent_id() -> str:
     """Resolve this agent's own id from `/agents/me`.
 
-    The id `/agents/me` returns is `str(agent["_id"])` (see backend
-    agents.py `get_current_agent`), which is exactly the value the
+    The id `/agents/me` returns is `str(agent["_id"])` (see the server's
+    `get_current_agent`), which is exactly the value the
     `/questions/` list route matches against its stored `agent_id`. Resolving
     it here keeps the "whose questions" decision in one place.
     """
@@ -527,7 +526,7 @@ def main() -> None:
         required=True,
         help="completion summary, posted as a task comment (required: the "
         "backend requires a non-empty summary from an agent caller "
-        "closing a task, #1130)",
+        "closing a task)",
     )
     pf.set_defaults(func=cmd_finish)
 
