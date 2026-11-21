@@ -373,7 +373,7 @@ def _find_transition_path(
       templates) — a single hop straight to any status satisfying
       `is_target`.
     * A status with NO transition object naming it as `from` is ALSO
-      any-to-any FROM THAT STATUS specifically (see the server's "No
+      any-to-any FROM THAT STATUS specifically (the server's own rule: "No
       transitions from this status defined — allow"). Matching the backend
       exactly, that wildcard hop is NOT gated by `required_fields` — no
       transition object exists to hold them. This looks like a bug at
@@ -464,8 +464,8 @@ def _find_transition_path(
 # sites (`update_task`, the bulk-update per-item loop) reach it ONLY via
 # `is_active_transition(old, new)`.
 #
-# #1246 made that gate itself workflow-aware: `task_blocking.
-# gate_active_statuses(workflow_active_statuses)` unions a hardcoded FLOOR
+# #1246 made that gate itself workflow-aware: the server's
+# `gate_active_statuses(workflow_active_statuses)` unions a hardcoded FLOOR
 # (`ACTIVE_STATUSES = {"in_progress", "in_review"}`) with the target
 # workspace+item_type's own workflow-resolved "gate-active" status keys —
 # so a transition into `bug/default`'s `fixing` gates exactly like
@@ -479,12 +479,12 @@ def _find_transition_path(
 # can't import the backend package. Two pieces, matching the backend's own
 # two functions exactly:
 #
-#   `_GATE_ACTIVE_STATUSES_FLOOR` mirrors `task_blocking.ACTIVE_STATUSES` —
+#   `_GATE_ACTIVE_STATUSES_FLOOR` mirrors the server's `ACTIVE_STATUSES` —
 #   the hardcoded minimum, unioned in regardless of workflow.
 #
-#   `_gate_active_statuses(workflow)` mirrors `task_blocking.
-#   gate_active_statuses()` UNIONED with `workflows.workflow_active_status_
-#   keys()`'s own resolution — which is a DENYLIST
+#   `_gate_active_statuses(workflow)` mirrors the server's
+#   `gate_active_statuses()` UNIONED with the server's
+#   `workflow_active_status_keys()` resolution — which is a DENYLIST
 #   (`category not in {"todo", "done"}`), not an allowlist of
 #   `category == "active"`. That distinction is load-bearing: the backend
 #   fails CLOSED toward gating for an unrecognized, missing, or `None`
@@ -498,7 +498,7 @@ def _find_transition_path(
 # `_claim_path` below for how it's used.
 _GATE_ACTIVE_STATUSES_FLOOR = frozenset({"in_progress", "in_review"})
 
-# Mirrors app.api.routes.workflows._KNOWN_INACTIVE_CATEGORIES exactly — the
+# Mirrors the server's `_KNOWN_INACTIVE_CATEGORIES` exactly — the
 # only two categories `workflow_active_status_keys` treats as NOT
 # gate-active. Everything else (an explicit "active", an unrecognized
 # value, a missing key, `None`) counts as gate-active, fail-closed.
@@ -508,13 +508,13 @@ _GATE_INACTIVE_CATEGORIES = frozenset({"todo", "done"})
 def _gate_active_statuses(workflow: Optional[dict]) -> frozenset[str]:
     """The status keys whose ENTRY the backend's dependency execution gate
     actually triggers on, for THIS workflow — mirrors
-    `task_blocking.gate_active_statuses()` exactly:
+    the server's `gate_active_statuses()` exactly:
 
         gate_active_statuses(workflow_active_statuses)
             == ACTIVE_STATUSES | (workflow_active_statuses - {"blocked"})
 
     where `workflow_active_statuses` is itself
-    `workflows.workflow_active_status_keys()`'s result (the category
+    the server's `workflow_active_status_keys()` result (the category
     DENYLIST described above `_GATE_INACTIVE_CATEGORIES`).
 
     `workflow is None` (no custom workflow for this workspace+item_type)
@@ -528,7 +528,7 @@ def _gate_active_statuses(workflow: Optional[dict]) -> frozenset[str]:
     (e.g. `"parked"`) tagged the same way is NOT excluded — the backend's
     carve-out is a literal-string exception, not a semantic "any parking
     status" rule, and this has to match that precisely rather than
-    generalize it. See `task_blocking.gate_active_statuses`'s own
+    generalize it. See the server's `gate_active_statuses`'s own
     docstring for why the carve-out exists at all: gating entry into
     "blocked" would 409 the one caller class (agents) that most needs to
     record a dependency-blocked state, and agents can never `force` past a
@@ -599,7 +599,7 @@ def _claim_path(workflow: Optional[dict], task: dict) -> Optional[list[str]]:
     `bug/default` outright rather than risk that.
 
     #1246 (backend) then made the gate itself workflow-aware
-    (`task_blocking.gate_active_statuses`, mirrored by
+    (the server's `gate_active_statuses`, mirrored by
     `_gate_active_statuses` above), and #1249 made `PATCH /tasks/{id}`
     accept a workflow's own status keys as legal write targets at all.
     Both reasons for the blanket `bug/default` refusal are gone: `fixing`
@@ -938,7 +938,7 @@ def _handoff_summary(outcome: dict, handoff_target: str) -> str:
 # hardcoded minimum that always applies, workflow or not.
 _SUMMARY_REQUIRED_STATUSES = {"done", "blocked", "canceled", "in_review"}
 
-# Mirrors `app.api.routes.workflows._KNOWN_NON_TERMINAL_CATEGORIES` exactly
+# Mirrors the server's `_KNOWN_NON_TERMINAL_CATEGORIES` exactly
 # — deliberately a SEPARATE constant from `_GATE_INACTIVE_CATEGORIES` above,
 # not a reuse: the two backend predicates disagree on purpose, and that
 # disagreement is load-bearing, not an oversight. `_GATE_INACTIVE_CATEGORIES`
@@ -959,7 +959,7 @@ _NON_TERMINAL_CATEGORIES = frozenset({"todo", "active"})
 def _summary_required_statuses(workflow: Optional[dict]) -> frozenset[str]:
     """The full set of status keys a PATCH into requires a non-empty
     `summary` for, given THIS task's own (workspace, item_type) workflow —
-    mirrors `app.api.routes.tasks._resolve_summary_required_statuses`
+    mirrors the server's `_resolve_summary_required_statuses`
     exactly: the `_SUMMARY_REQUIRED_STATUSES` floor UNIONED with this
     workflow's own terminal-category (non-`_NON_TERMINAL_CATEGORIES`) status
     keys.
