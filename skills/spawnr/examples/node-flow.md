@@ -108,13 +108,13 @@ const { spawn } = require('child_process');
 const readline = require('readline');
 
 // Stream real-time events
-const watcher = spawn('spawnr', ['watch', '--pretty']);
+const watcher = spawn('spawnr', ['watch', '--pretty'], { stdio: ['ignore', 'pipe', 'inherit'] });
 watcher.stdout.on('data', (data) => {
   console.log(`Event: ${data}`);
 });
 
 // Filter specific events: each event is JSON, with the task's fields under "data"
-const taskWatcher = spawn('spawnr', ['watch', '--filter', 'task.status_changed']);
+const taskWatcher = spawn('spawnr', ['watch', '--filter', 'task.status_changed'], { stdio: ['ignore', 'pipe', 'inherit'] });
 let buf = '';
 readline.createInterface({ input: taskWatcher.stdout }).on('line', (line) => {
   if (line.startsWith('{')) buf = ''; // a new event starts with "{"; drop any earlier line that never parsed
