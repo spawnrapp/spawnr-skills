@@ -1,26 +1,18 @@
 """Tests for skills/openclaw/scripts/spawnr_client.py.
 
-Not collected by any CI job or git hook today: the backend pytest gate
-(``.github/workflows/ci.yml``'s ``test-backend`` job, and the pre-push
-hook's ``scripts/run-backend-pytest.sh``) always ``cd``s into ``backend/``
-before running, and there is no repo-root ``pytest.ini``/``pyproject.toml``
-that would pick up ``skills/`` either. Run it explicitly, from the repo root:
+Run it from the repo root:
 
     python3 -m pytest skills/openclaw/tests/test_spawnr_client.py -v
 
 The script under test has zero third-party imports (stdlib only — see its
 own module docstring), so any Python 3.10+ interpreter with pytest
-installed works. If this checkout has a populated ``backend/.venv``
-(created per the repo CLAUDE.md — not every worktree has one),
-``backend/.venv/bin/python -m pytest ...`` works too and is the
-persistent, dependency-pinned option; it is not required for this file.
+installed works.
 
 Every request body asserted here is checked against the corresponding
-Pydantic model as of this commit:
-  - CreateQuestionRequest       backend/app/api/routes/questions.py
-  - UpdateTaskRequest            backend/app/api/routes/tasks.py
+Pydantic model on the Spawnr server as of this commit:
+  - CreateQuestionRequest
+  - UpdateTaskRequest
   - AGENT_SUMMARY_REQUIRED_STATUSES / _check_agent_summary_required (#1130)
-                                  backend/app/api/routes/tasks.py
 """
 
 from __future__ import annotations
@@ -416,7 +408,7 @@ def test_list_accepts_every_known_status(monkeypatch, capsys, status):
     """Parametrized off `sc._TASK_STATUSES` itself, not a third hardcoded
     copy of the vocabulary — the non-tautological drift check against the
     backend's `VALID_STATUSES` lives in
-    backend/tests/test_openclaw_status_vocabulary.py.
+    the Spawnr server's test_openclaw_status_vocabulary.py.
 
     Asserts stderr is EMPTY, not just that the request went through: now
     that no status exits, `len(rec.calls) == 1` alone holds for literally

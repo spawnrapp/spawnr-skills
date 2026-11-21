@@ -28,7 +28,7 @@ def prose(text: str) -> str:
 
 
 def slug(heading: str) -> str:
-    # ponytail: GitHub numbers duplicate headings (-1, -2); this does not model that.
+    # Known limit: GitHub numbers duplicate headings (-1, -2); this does not model that.
     return re.sub(r"[^\w\s-]", "", heading.lower()).replace(" ", "-")
 
 

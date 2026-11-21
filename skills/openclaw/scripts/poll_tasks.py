@@ -94,9 +94,9 @@ def _load_handler(spec: str) -> Callable[[dict], dict]:
 
 # #1233: hardcoding "open" left a poller on the bug or story default
 # workflow template with ZERO claimable work, forever — `"open"` is in
-# `VALID_STATUSES` (backend/app/api/routes/tasks.py), the WRITE-accepted
-# vocabulary, but the STORED vocabulary is open-ended: `apply_template`
-# (backend/app/api/routes/workflows.py) `$set`s a template's own statuses via
+# the server's `VALID_STATUSES`, the WRITE-accepted
+# vocabulary, but the STORED vocabulary is open-ended: the server's
+# `apply_template` `$set`s a template's own statuses via
 # `update_many` with no validator, and `GET /tasks/mine` has no `type` filter
 # to exclude them. The built-in templates alone produce `draft`/`ready`
 # (story/default) and `new`/`triaged`/`fixing`/`closed`/`wont_fix`
@@ -105,8 +105,8 @@ def _load_handler(spec: str) -> Callable[[dict], dict]:
 # The honest replacement question is "is this task actionable", not "is it
 # open". This script is stdlib-only and outside the backend package, so it
 # can't ask the workflow engine directly — it approximates by taking every
-# status keyed `"category": "todo"` across the built-in `WORKFLOW_TEMPLATES`
-# (backend/app/api/routes/workflows.py):
+# status keyed `"category": "todo"` across the server's built-in
+# `WORKFLOW_TEMPLATES`:
 #
 #   task/default & task/kanban  -> open
 #   story/default & story/kanban -> draft, ready | open
@@ -132,7 +132,7 @@ def _load_handler(spec: str) -> Callable[[dict], dict]:
 # same failure shape as the bug this fix closes, just for a smaller
 # population. `--statuses` below is the escape hatch for that case.
 #
-# Pinned by backend/tests/test_openclaw_poll_actionable_statuses.py, which
+# Pinned by the Spawnr server's test_openclaw_poll_actionable_statuses.py, which
 # derives the "todo"-category union live from WORKFLOW_TEMPLATES so a new
 # built-in template status fails there instead of quietly starving pollers
 # in the field.
@@ -149,7 +149,7 @@ _ACTIONABLE_STATUSES = frozenset({"open", "draft", "ready", "new", "triaged"})
 # on the final one, leaving it parked at the intermediate status (`ready`)
 # with no reverse transition to undo it. `story/default` defines none.
 #
-# `GET /tasks/mine` (#1256, `backend/app/api/routes/tasks.py`) now carries
+# `GET /tasks/mine` (#1256) now carries
 # the same derived `blocked_state` the gate itself computes, so this script
 # can skip a blocked task BEFORE walking it at all, rather than discovering
 # the block on the last hop. `_BLOCKED_STATES` mirrors the backend's own
@@ -238,7 +238,7 @@ def _list_actionable_tasks(
 #
 # Listing the right tasks was only half the bug. `_work_task` used to claim
 # with an unconditional `PATCH {"status": "in_progress"}`, and every write
-# goes through `validate_transition` (backend/app/api/routes/workflows.py),
+# goes through the server's `validate_transition`,
 # which enforces whatever workflow the task's own workspace+item_type has —
 # built-in template or custom. Probed against the real WORKFLOW_TEMPLATES:
 #
@@ -275,7 +275,7 @@ def _list_actionable_tasks(
 # applies", route to the `["in_progress"]` fallback, and get CACHED for
 # `_WORKFLOW_CACHE_TTL` seconds. This substring narrows the signal to the
 # one case that's actually safe. Pinned by
-# backend/tests/test_openclaw_poll_actionable_statuses.py against
+# the Spawnr server's test_openclaw_poll_actionable_statuses.py against
 # `get_workflow`'s real source, so a reworded detail string fails there
 # instead of quietly reopening the conflation (worst case if it drifts:
 # EVERY workflow lookup on a no-template workspace — the common case —
@@ -350,7 +350,7 @@ def _role_allows_agent(allowed_roles: list) -> bool:
     (`task_update/apply.py`, `task_bulk.py`); `workflow_rules.validate_transition`
     lets a Member take an edge only when `allowed_roles` is empty or names
     Member or Viewer. Pinned against the real check by
-    backend/tests/test_openclaw_poll_actionable_statuses.py."""
+    the Spawnr server's test_openclaw_poll_actionable_statuses.py."""
     return not allowed_roles or "Member" in allowed_roles or "Viewer" in allowed_roles
 
 
@@ -361,8 +361,8 @@ def _find_transition_path(
     is_target: Callable[[str], bool],
 ) -> Optional[list[str]]:
     """Shortest legal path of status keys from `from_status` to the nearest
-    status satisfying `is_target`, mirroring `validate_transition`'s own
-    edge semantics (`backend/app/services/workflow_rules.py`) so every path
+    status satisfying `is_target`, mirroring the server's
+    `validate_transition` edge semantics so every path
     this returns is guaranteed PATCH-able:
 
     * `from_status` must be a real status in this workflow. An orphaned
@@ -457,8 +457,8 @@ def _find_transition_path(
     return None
 
 
-# US-006.3's dependency execution gate (`enforce_can_start`,
-# backend/app/services/task_blocking.py) is what stops an agent starting a
+# US-006.3's dependency execution gate (the server's `enforce_can_start`)
+# is what stops an agent starting a
 # dependency-blocked task — and an agent caller can NEVER force past it
 # (`_HUMAN_AUTH_TYPES = {"jwt"}`; `force` is JWT-only). Both PATCH call
 # sites (`update_task`, the bulk-update per-item loop) reach it ONLY via
@@ -492,7 +492,7 @@ def _find_transition_path(
 #   trust a status the backend doesn't actually gate — the exact bypass
 #   #1233's review caught, reopened under a new name.
 #
-# Pinned by backend/tests/test_openclaw_poll_gate_active_statuses.py against
+# Pinned by the Spawnr server's test_openclaw_poll_gate_active_statuses.py against
 # the real `gate_active_statuses` AND the real category-denylist constant,
 # both as values AND as the claim-safety behavior they drive — see
 # `_claim_path` below for how it's used.
@@ -751,7 +751,7 @@ def _handoff_candidates(workflow: dict) -> frozenset[str]:
 
     Verified against all six built-in templates
     (`TestHandoffCandidateDerivation` in
-    backend/tests/test_openclaw_poll_actionable_statuses.py):
+    the Spawnr server's test_openclaw_poll_actionable_statuses.py):
 
       task/default, story/default, bug/default -> {"in_review"}: each has
       exactly one "active" status (`in_review`) with a direct edge into a
@@ -925,7 +925,7 @@ def _handoff_summary(outcome: dict, handoff_target: str) -> str:
 # these statuses, or the PATCH 422s. Duplicated from the backend's
 # AGENT_SUMMARY_REQUIRED_STATUSES (app/api/routes/tasks.py) because this script
 # is stdlib-only and outside the backend package — the copy is pinned by
-# backend/tests/test_openclaw_summary_contract.py so it can't drift silently.
+# the Spawnr server's test_openclaw_summary_contract.py so it can't drift silently.
 #
 # #1271: this is a FLOOR, not the whole story. The backend's real check
 # (`_resolve_summary_required_statuses`, `app/api/routes/tasks.py`) unions

@@ -159,8 +159,8 @@ def cmd_whoami(_args: argparse.Namespace) -> None:
     _print_json(_request("GET", "/agents/me"))
 
 
-# The WRITE-accepted status vocabulary, duplicated from `VALID_STATUSES` in
-# backend/app/api/routes/tasks.py — i.e. what `PATCH /tasks/{id}` accepts.
+# The WRITE-accepted status vocabulary, duplicated from the server's
+# `VALID_STATUSES` — i.e. what `PATCH /tasks/{id}` accepts.
 #
 # It is NOT the set of statuses a task can HAVE. The stored vocabulary is
 # deliberately open-ended: workflow templates carry their own statuses and
@@ -174,7 +174,7 @@ def cmd_whoami(_args: argparse.Namespace) -> None:
 # Script is stdlib-only and can't import the backend (same constraint as
 # `poll_tasks._SUMMARY_REQUIRED_STATUSES` vs `AGENT_SUMMARY_REQUIRED_STATUSES`,
 # #1220), so it's duplicated and pinned by
-# backend/tests/test_openclaw_status_vocabulary.py.
+# the Spawnr server's test_openclaw_status_vocabulary.py.
 _TASK_STATUSES = frozenset(
     {
         # VALID_STATUSES — the write-accepted set.
@@ -198,7 +198,7 @@ _TASK_STATUSES = frozenset(
     }
 )
 
-# `GET /tasks/mine` (see list_my_tasks in backend/app/api/routes/tasks.py)
+# `GET /tasks/mine` (the server's `list_my_tasks`)
 # caps its result at 100 tasks (`.to_list(length=100)`), newest-created
 # first. That cap is independent of `--status` but interacts badly with it:
 # client-side filtering (below) only ever sees the first 100, so an agent
@@ -320,8 +320,8 @@ def _require_nonblank(value: str, flag: str) -> str:
 def _require_within_summary_limit(value: str, flag: str) -> str:
     """Fail with a clear client-side message rather than a raw 422.
 
-    `UpdateTaskRequest.summary` (backend/app/api/routes/tasks.py) is capped
-    at `MAX_COMMENT_LEN` (5000, backend/app/api/routes/task_comments.py) —
+    The server's `UpdateTaskRequest.summary` is capped
+    at `MAX_COMMENT_LEN` (5000) —
     `--note`/`--reason` are posted straight into it by `cmd_finish`/
     `cmd_fail`. Unlike `_block_summary` below, which TRUNCATES because it is
     generating a wrapper string around text it did not author, `--note`/
@@ -342,7 +342,7 @@ def _require_within_summary_limit(value: str, flag: str) -> str:
 
 
 def cmd_finish(args: argparse.Namespace) -> None:
-    # UpdateTaskRequest (backend/app/api/routes/tasks.py) requires a
+    # The server's UpdateTaskRequest requires a
     # non-empty `summary` from an agent (X-API-Key) caller whenever `status`
     # moves to done/blocked/canceled/in_review (#1130) — `description` does
     # NOT satisfy that check, and posting it here would wholesale *replace*
@@ -412,10 +412,9 @@ def cmd_handoff(args: argparse.Namespace) -> None:
 
 
 def cmd_ask(args: argparse.Namespace) -> None:
-    # CreateQuestionRequest (backend/app/api/routes/questions.py) has no
+    # The server's CreateQuestionRequest has no
     # `task_id` field and is `extra="forbid"` — the task linkage is
-    # `context_type` + `context_ref`, per docs/user-guides/
-    # openclaw-onboarding.md's corrected example (#1219).
+    # `context_type` + `context_ref` (#1219).
     body = {
         "question": args.question,
         "context_type": "task",
@@ -527,7 +526,7 @@ def main() -> None:
         required=True,
         help="completion summary, posted as a task comment (required: the "
         "backend requires a non-empty summary from an agent caller "
-        "closing a task, #1130)",
+        "closing a task)",
     )
     pf.set_defaults(func=cmd_finish)
 
