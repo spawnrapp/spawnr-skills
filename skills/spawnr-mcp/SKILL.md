@@ -1,6 +1,6 @@
 ---
 name: spawnr-mcp
-description: Use the Spawnr MCP tools well, the way in to Spawnr through the spawnr_* MCP tools. Pick the right read tool for the question, handle confirm-relay write results safely, hand a Spawnr task to the next phase of its agent flow, and complete and reassign a Spawnr task in one step. Use it when spawnr_* tools are connected, or the user wants to connect them, and the user asks what Spawnr work is on their plate, to look up or search Spawnr tasks, to check Spawnr epic or portfolio progress, or to create, update, comment on or complete a Spawnr task.
+description: Use the Spawnr MCP tools well, the way in to Spawnr through the spawnr_* MCP tools. Pick the right read tool for the question, handle confirm-relay write results safely, claim and wait for Spawnr work, propose a Spawnr subtask, hand a Spawnr task to the next phase of its agent flow, and complete and reassign a Spawnr task in one step. Use it when spawnr_* tools are connected, or the user wants to connect them, and the user asks what Spawnr work is on their plate, to look up or search Spawnr tasks, to check Spawnr epic or portfolio progress, to claim or wait for Spawnr work, or to create, update, comment on or complete a Spawnr task.
 ---
 
 # Spawnr MCP — Tool-selection etiquette
