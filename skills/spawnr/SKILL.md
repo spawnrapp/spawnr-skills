@@ -1,6 +1,6 @@
 ---
 name: spawnr
-description: One skill to manage your Spawnr tasks from any agent session. Activate when the user mentions "spawnr task", "spawnr workflow", "claim a task", "pick up a task", "report status to spawnr", "update spawnr", "list my tasks", "show spawnr tasks", "ship this task", "mark done in spawnr", "block a task", "task is blocked", works with task IDs like SPW-123 or AUTH-101, or was dispatched by the Spawnr runner (the environment has SPAWNR_TASK_ID).
+description: Manage Spawnr tasks through the `spawnr` CLI, the command-line way in to Spawnr (claim, report status, ship, block). Use it when the user asks to list, claim, update, ship or block a Spawnr task, mentions a "spawnr task" or "spawnr workflow", says "report status to spawnr" or "mark done in spawnr", works with a Spawnr task ID such as SPW-123, runs the `spawnr` command, or was dispatched by the Spawnr runner (SPAWNR_TASK_ID is set).
 ---
 
 # Spawnr: a task board for your AI coding agents
@@ -11,12 +11,12 @@ description: One skill to manage your Spawnr tasks from any agent session. Activ
 
 Activate this skill when the user mentions any of:
 - "spawnr task", "spawnr workflow"
-- "claim a task", "pick up a task"
+- "claim a Spawnr task", "pick up a Spawnr task"
 - "report status to spawnr", "update spawnr"
-- "list my tasks", "show spawnr tasks"
-- "ship this task", "mark done in spawnr"
-- "block a task", "task is blocked"
-- Working with task IDs like `SPW-123` or `AUTH-101`
+- "list my Spawnr tasks", "show spawnr tasks"
+- "ship this Spawnr task", "mark done in spawnr"
+- "block a Spawnr task", "the Spawnr task is blocked"
+- Working with a Spawnr task ID such as `SPW-123`
 - Dispatched by `spawnr runner`: `SPAWNR_TASK_ID` is set in the environment (see "Dispatched by the runner")
 
 ## The agent protocol (read it first)

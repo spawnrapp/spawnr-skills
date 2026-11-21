@@ -1,6 +1,6 @@
 ---
 name: spawnr-mcp
-description: Use the Spawnr MCP tools well — pick the right read tool for the question, handle confirm-relay write results safely, and hand off tasks the supported way. Activates whenever the user asks "what's on my plate", to look up or search tasks, to check epic or portfolio progress, or to create, update, comment on, complete, or hand off a Spawnr task through the spawnr_* MCP tools.
+description: Use the Spawnr MCP tools well, the way in to Spawnr through the spawnr_* MCP tools. Pick the right read tool for the question, handle confirm-relay write results safely, hand a Spawnr task to the next phase of its agent flow, and complete and reassign a Spawnr task in one step. Use it when spawnr_* tools are connected, or the user wants to connect them, and the user asks what Spawnr work is on their plate, to look up or search Spawnr tasks, to check Spawnr epic or portfolio progress, or to create, update, comment on or complete a Spawnr task.
 ---
 
 # Spawnr MCP — Tool-selection etiquette
@@ -18,11 +18,11 @@ Before you claim, hand off or wait, read [`../spawnr-protocol/PROTOCOL.md`](../s
 
 ## When to Use
 
-Activate this skill when the user wants to:
-- "what's on my plate", "what am I working on", "my tasks", "my queue"
+Activate this skill when the user works on Spawnr through the `spawnr_*` MCP tools and wants to:
+- see their Spawnr work: "what's on my plate", "what am I working on", "my tasks", "my queue"
 - look up or search tasks ("find the auth task", "show me task T-12")
 - check epic, release, or portfolio progress
-- create, update, comment on, complete, or hand off a task via the MCP tools
+- create, update, comment on or complete a task, or complete it and pass it on in one step (`spawnr_complete_and_reassign`, people only)
 - add work under a task you hold (agent persona: propose a subtask)
 - see which agent flow a task follows, or pick one (`flow`), or read a
   `flow_not_allowed` refusal
@@ -203,7 +203,7 @@ response carries it as the top-level `code`. See the protocol's ["Refusal codes"
 To pass a task on from the agent persona: on a task with no flow, set it `blocked`
 with a `summary` that says why and who should take it (`spawnr_update_task_status`),
 and let a person reassign it; under a flow, hand off ([the protocol](../spawnr-protocol/PROTOCOL.md#handoffs)).
-`spawnr_complete_and_reassign` (Handoff convention, below) is a user-persona tool.
+`spawnr_complete_and_reassign` ("Complete and reassign", below) is a user-persona tool.
 
 **An OAuth session acts as the person.** A user-persona session (a person's OAuth
 token, on a local stdio server or the hosted `/mcp` endpoint) is the signed-in
@@ -442,7 +442,7 @@ spawnr_update_task_status({"task_id": "SPW-12", "status": "testing",
               "for_next": "role:tester: run the edge cases in tests/parser."}})
 ```
 
-## Handoff convention (user persona, no flow)
+## Complete and reassign (people only)
 
 On a task that follows an agent flow, hand off with `spawnr_update_task_status`
 and `handoff` instead ("Phases and handoffs", above). `spawnr_complete_and_reassign`
@@ -454,16 +454,16 @@ To finish a task and pass it on, use **`spawnr_complete_and_reassign`** — one 
 spawnr_complete_and_reassign({"task_id": "T1", "next_assignee": "user:U2"})
 ```
 
-- Take `next_assignee` from the task's **handoff instructions** (assignee form is
-  `"<type>:<id>"` where type is `user`, `agent`, or `role`).
-- If the handoff target is **not specified, ask the human** — do not invent one.
-- **Do not hand-roll the handoff** as two raw `spawnr_update_task` calls (one to
+- Take `next_assignee` from what the task says about who takes it next (assignee
+  form is `"<type>:<id>"` where type is `user`, `agent`, or `role`).
+- If the task names **no next assignee, ask the person** — do not invent one.
+- **Do not split it** into two raw `spawnr_update_task` calls (one to
   set `done`, one to reassign). The combined verb is atomic, so there is no
   partial-failure window where a task is done but unassigned.
 
 ## Tips
 
-- Recommended path for "what's on my plate, then hand off X":
+- Recommended path for "what's on my plate, then pass X on":
   `spawnr_get_my_work` → `spawnr_complete_and_reassign` (user persona). Not search + raw status
   updates.
 - IDs are raw ObjectIds, not display ids. For a single epic, pass the `_db_id`
