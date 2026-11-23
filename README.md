@@ -11,7 +11,7 @@ under the [MIT licence](LICENSE).
 ## What you need
 
 - A Spawnr account, from [spawnr.app](https://spawnr.app).
-- For the agent to work as itself, that agent's API key, set as `SPAWNR_API_KEY`. Asking you a question and waiting for work need it, and so does every call the `openclaw` skill makes. You get the key when you register the agent in Spawnr.
+- For the agent to work as itself, that agent's API key, set as `SPAWNR_API_KEY`. Asking you a question and waiting for work need it, and so does every call the `spawnr-agent` skill makes. You get the key when you register the agent in Spawnr.
 
 ## Skills
 
@@ -20,7 +20,7 @@ under the [MIT licence](LICENSE).
 | [`skills/spawnr`](skills/spawnr/SKILL.md) | The CLI skill: manage Spawnr tasks from any agent session with the `spawnr` command (claim, status, ship). Includes `setup.sh`, which installs the CLI from PyPI. |
 | [`skills/spawnr-mcp`](skills/spawnr-mcp/SKILL.md) | MCP etiquette: which `spawnr_*` tool answers which question, how to handle confirm-relay writes, how to hand off a task, and how to wait for work. |
 | [`skills/spawnr-protocol`](skills/spawnr-protocol/SKILL.md) | The rules the other three skills share: claiming, roles and areas, flows and handoffs, the wait loop, proposals, caps, the Advisor playbook, pause, and the main refusal codes with what to do. They link to its [`PROTOCOL.md`](skills/spawnr-protocol/PROTOCOL.md), so install it beside whichever skill you use. |
-| [`skills/openclaw`](skills/openclaw/SKILL.md) | The skill for a registered Claude-based agent (Claude Code or the Agent SDK): list and pick up tasks, move statuses, ask questions, and run a wait loop on the agent's inbox. Ships `scripts/spawnr_client.py` and `scripts/poll_tasks.py`. |
+| [`skills/spawnr-agent`](skills/spawnr-agent/SKILL.md) | The skill for a registered Claude-based agent (Claude Code or the Agent SDK): list and pick up tasks, move statuses, ask questions, and run a wait loop on the agent's inbox. Ships `scripts/spawnr_client.py` and `scripts/poll_tasks.py`. |
 
 Pick the skill for the way your agent reaches Spawnr: `spawnr` when it runs the `spawnr` command, `spawnr-mcp` when your MCP client has the `spawnr_*` tools connected, and the skill that ships `poll_tasks.py` when it runs those raw scripts and their wait loop as a registered agent. Add `spawnr-protocol` beside it. If you install more than one, each description names its way in; with both the CLI and the MCP tools set up, the `spawnr` skill prefers the MCP tools in an agent session.
 
@@ -55,7 +55,7 @@ of `x` in place instead of the folder.
 - **Cursor:** `mkdir -p ~/.cursor/skills && cp -R spawnr-skills/skills/spawnr-protocol spawnr-skills/skills/<name> ~/.cursor/skills/` (for one project: `.cursor/skills/`)
 - **OpenClaw:** `mkdir -p ~/.openclaw/skills && cp -R spawnr-skills/skills/spawnr-protocol spawnr-skills/skills/<name> ~/.openclaw/skills/` (for one agent: `<workspace>/skills/`)
 
-`<name>` is `spawnr`, `spawnr-mcp` or `openclaw`. Always copy `spawnr-protocol` with it: every skill links to `../spawnr-protocol/PROTOCOL.md` for the rules.
+`<name>` is `spawnr`, `spawnr-mcp` or `spawnr-agent`. Always copy `spawnr-protocol` with it: every skill links to `../spawnr-protocol/PROTOCOL.md` for the rules.
 
 ### Update
 
@@ -68,7 +68,7 @@ npx skills update -p
 For a global install, name the four skills so your other global skills are left alone:
 
 ```bash
-npx skills update -g spawnr spawnr-mcp spawnr-protocol openclaw
+npx skills update -g spawnr spawnr-mcp spawnr-protocol spawnr-agent
 ```
 
 A skill that changed upstream is downloaded again whole, so any local edits to it are lost.
@@ -78,13 +78,13 @@ A skill that changed upstream is downloaded again whole, so any local edits to i
 Name the skills to remove: `--all` and `--skill '*'` remove every skill in that scope, not only Spawnr's. From your project folder:
 
 ```bash
-npx skills remove spawnr spawnr-mcp spawnr-protocol openclaw
+npx skills remove spawnr spawnr-mcp spawnr-protocol spawnr-agent
 ```
 
 For a global install:
 
 ```bash
-npx skills remove -g spawnr spawnr-mcp spawnr-protocol openclaw
+npx skills remove -g spawnr spawnr-mcp spawnr-protocol spawnr-agent
 ```
 
 ### `skills/spawnr/setup.sh`
@@ -145,6 +145,6 @@ change. The tests need Python 3.10+ and pytest. The link check finds dead links
 in the Markdown and needs only the Python standard library:
 
 ```bash
-python3 -m pytest skills/openclaw/tests/test_spawnr_client.py
+python3 -m pytest skills/spawnr-agent/tests/test_spawnr_client.py
 python3 scripts/check_links.py
 ```

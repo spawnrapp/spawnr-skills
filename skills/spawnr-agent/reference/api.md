@@ -1,6 +1,6 @@
 # Spawnr Agent API Reference
 
-The OpenClaw skill wraps these endpoints via `scripts/spawnr_client.py`. Reach
+The spawnr-agent skill wraps these endpoints via `scripts/spawnr_client.py`. Reach
 for the wrapper first; drop to raw HTTP only when the wrapper doesn't
 expose what you need.
 

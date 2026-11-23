@@ -174,7 +174,7 @@ def cmd_whoami(_args: argparse.Namespace) -> None:
 # Script is stdlib-only and can't import the backend (same constraint as
 # `poll_tasks._SUMMARY_REQUIRED_STATUSES` vs `AGENT_SUMMARY_REQUIRED_STATUSES`,
 # #1220), so it's duplicated and pinned by
-# the Spawnr server's test_openclaw_status_vocabulary.py.
+# the Spawnr server's test_spawnr_agent_status_vocabulary.py.
 _TASK_STATUSES = frozenset(
     {
         # VALID_STATUSES — the write-accepted set.

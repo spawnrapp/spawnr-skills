@@ -1,4 +1,4 @@
-# OpenClaw — Spawnr agent skill
+# Spawnr Agent — skill for a registered Spawnr agent
 
 An installable skill that gives a Claude-based agent everything it needs
 to work tasks in Spawnr: list assignments, pick them up, update
@@ -21,7 +21,7 @@ Copy the skill into your project's `.claude/skills/` directory:
 
 ```bash
 mkdir -p .claude/skills
-cp -R path/to/spawnr-skills/skills/openclaw .claude/skills/openclaw
+cp -R path/to/spawnr-skills/skills/spawnr-agent .claude/skills/spawnr-agent
 cp -R path/to/spawnr-skills/skills/spawnr-protocol .claude/skills/spawnr-protocol
 ```
 
@@ -30,7 +30,7 @@ about "my Spawnr tasks", task IDs, the wait loop, etc.
 
 ### Claude Agent SDK
 
-Copy the skill to `.claude/skills/openclaw`, and `spawnr-protocol` beside it
+Copy the skill to `.claude/skills/spawnr-agent`, and `spawnr-protocol` beside it
 (the skill links to its [`PROTOCOL.md`](../spawnr-protocol/PROTOCOL.md) for the
 rules), as above, then load it through `ClaudeAgentOptions`:
 
@@ -42,7 +42,7 @@ async def main():
     options = ClaudeAgentOptions(
         cwd=".",  # .claude/skills/ here or in a parent directory
         setting_sources=["user", "project"],  # skills load from the filesystem
-        skills=["openclaw"],  # or "all"
+        skills=["spawnr-agent"],  # or "all"
         allowed_tools=["Read", "Bash"],
     )
     async for message in query(prompt="List my Spawnr tasks", options=options):
@@ -208,6 +208,6 @@ them choose.
 
 ## Versioning
 
-This skill lives in the spawnr-skills repo at `skills/openclaw/` and follows
+This skill lives in the spawnr-skills repo at `skills/spawnr-agent/` and follows
 that repo's releases. Pin to a git sha if you need stability guarantees
 while the Spawnr API is still evolving.

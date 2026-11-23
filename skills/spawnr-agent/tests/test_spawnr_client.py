@@ -1,8 +1,8 @@
-"""Tests for skills/openclaw/scripts/spawnr_client.py.
+"""Tests for skills/spawnr-agent/scripts/spawnr_client.py.
 
 Run it from the repo root:
 
-    python3 -m pytest skills/openclaw/tests/test_spawnr_client.py -v
+    python3 -m pytest skills/spawnr-agent/tests/test_spawnr_client.py -v
 
 The script under test has zero third-party imports (stdlib only — see its
 own module docstring), so any Python 3.10+ interpreter with pytest
@@ -408,7 +408,7 @@ def test_list_accepts_every_known_status(monkeypatch, capsys, status):
     """Parametrized off `sc._TASK_STATUSES` itself, not a third hardcoded
     copy of the vocabulary — the non-tautological drift check against the
     backend's `VALID_STATUSES` lives in
-    the Spawnr server's test_openclaw_status_vocabulary.py.
+    the Spawnr server's test_spawnr_agent_status_vocabulary.py.
 
     Asserts stderr is EMPTY, not just that the request went through: now
     that no status exits, `len(rec.calls) == 1` alone holds for literally
@@ -479,7 +479,7 @@ def test_questions_mine_uses_agent_id_from_agents_me(monkeypatch):
     site was already correct; confirm it stays that way."""
     rec = _Recorder()
     rec.responses = [
-        {"id": "agent-123", "name": "openclaw-reviewer"},
+        {"id": "agent-123", "name": "reviewer-agent"},
         {"questions": []},
     ]
     monkeypatch.setattr(sc, "_request", rec)
@@ -675,7 +675,7 @@ def test_request_timeout_defaults_to_30_and_a_caller_value_reaches_urlopen(monke
     [
         "https://spawnr.example.com",  # host root: the CLI's meaning
         "https://spawnr.example.com/",
-        "https://spawnr.example.com/api/v1",  # the old openclaw form
+        "https://spawnr.example.com/api/v1",  # the form this skill used to take
         "https://spawnr.example.com/api/v1/",
     ],
 )
@@ -1338,7 +1338,7 @@ class TestInboxWait:
         assert len(ids) == 1  # the agent id is resolved once, not per cycle
 
     def test_the_old_interval_flag_still_sets_the_wait(self, monkeypatch):
-        """The in-app OpenClaw docs card still sends the old flag name: it is an alias."""
+        """The flag's old name, --interval, is still an alias."""
         waits, _sleeps, _ids = self._run_main(
             monkeypatch, 25, SystemExit(1), flag="--interval"
         )

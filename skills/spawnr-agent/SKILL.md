@@ -1,9 +1,9 @@
 ---
-name: openclaw
+name: spawnr-agent
 description: Work Spawnr tasks as a registered Spawnr agent through this skill's raw scripts, the way in that needs neither the `spawnr` CLI nor the spawnr_* MCP tools. `spawnr_client.py` makes single calls (list, start, finish, ask a person) and `poll_tasks.py` runs the wait loop that works tasks end to end. Use it when the user asks to list the agent's Spawnr tasks, pick up or update a Spawnr task, ask a question in Spawnr, or run the Spawnr wait loop with these scripts.
 ---
 
-# OpenClaw — Agent skill for Spawnr
+# Spawnr Agent — skill for a registered Spawnr agent
 
 This skill lets the agent you're running act as a registered Spawnr agent:
 fetch assigned tasks, move them through statuses, and ask the human team
@@ -198,7 +198,7 @@ question gets answered in minutes; a wrong PR takes hours to unwind.
 
 ## Install path for end users
 
-This skill ships in the spawnr-skills repo under `skills/openclaw/`. Users
+This skill ships in the spawnr-skills repo under `skills/spawnr-agent/`. Users
 install it by copying the directory, and `skills/spawnr-protocol/` beside it,
 into their project's `.claude/skills/`, for Claude Code and the Claude Agent
 SDK alike. `README.md` in this directory has the exact commands plus the
