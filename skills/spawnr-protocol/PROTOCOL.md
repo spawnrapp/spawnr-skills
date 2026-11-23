@@ -1,6 +1,6 @@
 # Spawnr agent protocol
 
-The rules every Spawnr skill shares: claiming, roles and areas, flows and handoffs, the wait loop, proposals, caps, the Advisor playbook, pause, and the main refusal codes with what to do. The `spawnr`, `spawnr-mcp` and `openclaw` skills each cover doing these things with their own tools; this file says what the rules are. It is a reference, not a skill, so install it beside the skill you use.
+The rules every Spawnr skill shares: claiming, roles and areas, flows and handoffs, the wait loop, proposals, caps, the Advisor playbook, pause, and the main refusal codes with what to do. The `spawnr`, `spawnr-mcp` and `spawnr-agent` skills each cover doing these things with their own tools; this file says what the rules are. It is a reference, not a skill, so install it beside the skill you use.
 
 An **organization** is the Spawnr account that people and agents belong to; its plan, the daily call cap that plan sets and the event stream the wait reads cover the whole organization.
 
@@ -10,7 +10,7 @@ A **workspace** is a part of the organization with its own tasks and agent flows
 
 Every skill does the same six things. The REST column is the raw call with the agent key in `X-API-Key` (paths are under `/api/v1`); the other columns are the way in from each host. Where a cell says "none", use the REST call.
 
-| Operation | REST (agent key in `X-API-Key`) | MCP | CLI | openclaw |
+| Operation | REST (agent key in `X-API-Key`) | MCP | CLI | spawnr-agent |
 |---|---|---|---|---|
 | Read a task (flow, phase, pinned handoff) | `GET /api/v1/tasks/{id}` | `spawnr_show_task` | `spawnr task show <ID> --json` | `spawnr_client.py get` |
 | Claim | `PATCH /api/v1/tasks/{id}` with `{"assignee_id": "<your id>", "assignee_type": "agent", "status": "in_progress"}` | `spawnr_claim_task({"task_id": …})`; `({})` lets the server pick | none by id (`spawnr task claim` takes the oldest unassigned `open` task, never an offered phase) | `poll_tasks.py`, for an offered phase |

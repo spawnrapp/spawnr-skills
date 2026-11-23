@@ -132,7 +132,7 @@ def _load_handler(spec: str) -> Callable[[dict], dict]:
 # same failure shape as the bug this fix closes, just for a smaller
 # population. `--statuses` below is the escape hatch for that case.
 #
-# Pinned by the Spawnr server's test_openclaw_poll_actionable_statuses.py, which
+# Pinned by the Spawnr server's test_spawnr_agent_poll_actionable_statuses.py, which
 # derives the "todo"-category union live from WORKFLOW_TEMPLATES so a new
 # built-in template status fails there instead of quietly starving pollers
 # in the field.
@@ -275,7 +275,7 @@ def _list_actionable_tasks(
 # applies", route to the `["in_progress"]` fallback, and get CACHED for
 # `_WORKFLOW_CACHE_TTL` seconds. This substring narrows the signal to the
 # one case that's actually safe. Pinned by
-# the Spawnr server's test_openclaw_poll_actionable_statuses.py against
+# the Spawnr server's test_spawnr_agent_poll_actionable_statuses.py against
 # `get_workflow`'s real source, so a reworded detail string fails there
 # instead of quietly reopening the conflation (worst case if it drifts:
 # EVERY workflow lookup on a no-template workspace — the common case —
@@ -350,7 +350,7 @@ def _role_allows_agent(allowed_roles: list) -> bool:
     (the server's task update and bulk update routes); the server's `validate_transition`
     lets a Member take an edge only when `allowed_roles` is empty or names
     Member or Viewer. Pinned against the real check by
-    the Spawnr server's test_openclaw_poll_actionable_statuses.py."""
+    the Spawnr server's test_spawnr_agent_poll_actionable_statuses.py."""
     return not allowed_roles or "Member" in allowed_roles or "Viewer" in allowed_roles
 
 
@@ -492,7 +492,7 @@ def _find_transition_path(
 #   trust a status the backend doesn't actually gate — the exact bypass
 #   #1233's review caught, reopened under a new name.
 #
-# Pinned by the Spawnr server's test_openclaw_poll_gate_active_statuses.py against
+# Pinned by the Spawnr server's test_spawnr_agent_poll_gate_active_statuses.py against
 # the real `gate_active_statuses` AND the real category-denylist constant,
 # both as values AND as the claim-safety behavior they drive — see
 # `_claim_path` below for how it's used.
@@ -751,7 +751,7 @@ def _handoff_candidates(workflow: dict) -> frozenset[str]:
 
     Verified against all six built-in templates
     (`TestHandoffCandidateDerivation` in
-    the Spawnr server's test_openclaw_poll_actionable_statuses.py):
+    the Spawnr server's test_spawnr_agent_poll_actionable_statuses.py):
 
       task/default, story/default, bug/default -> {"in_review"}: each has
       exactly one "active" status (`in_review`) with a direct edge into a
@@ -910,7 +910,7 @@ def _handoff_summary(outcome: dict, handoff_target: str) -> str:
     unresolved_status = outcome.get("status")
     body = (outcome.get("summary") or "").strip()
     if not body:
-        body = f"Recorded by openclaw poll_tasks: {unresolved_status}."
+        body = f"Recorded by spawnr-agent poll_tasks: {unresolved_status}."
     text = (
         f"[Outcome: {unresolved_status}] Handed off to '{handoff_target}' for "
         "human review — a person has to take the last step: this agent "
@@ -925,7 +925,7 @@ def _handoff_summary(outcome: dict, handoff_target: str) -> str:
 # these statuses, or the PATCH 422s. Duplicated from the backend's
 # AGENT_SUMMARY_REQUIRED_STATUSES because this script
 # is stdlib-only and outside the backend package — the copy is pinned by
-# the Spawnr server's test_openclaw_summary_contract.py so it can't drift silently.
+# the Spawnr server's test_spawnr_agent_summary_contract.py so it can't drift silently.
 #
 # #1271: this is a FLOOR, not the whole story. The backend's real check
 # (the server's `_resolve_summary_required_statuses`) unions
@@ -993,7 +993,7 @@ def _summary_required_statuses(workflow: Optional[dict]) -> frozenset[str]:
 # summary-required one (e.g. a workflow with no "in_progress"-equivalent,
 # where "in_review" is the only active-category key) — none of the six
 # built-in templates hit this. Generic, harmless text for that edge case.
-_CLAIM_SUMMARY = "Claimed by openclaw poll_tasks."
+_CLAIM_SUMMARY = "Claimed by spawnr-agent poll_tasks."
 
 
 def _walk_transitions(
@@ -1109,7 +1109,7 @@ def _normalize_outcome(
         # Prefer the handler's own words over a generic line.
         summary = (result.get("description") or "").strip()
     if not summary:
-        summary = f"Recorded by openclaw poll_tasks: {out['status']}."
+        summary = f"Recorded by spawnr-agent poll_tasks: {out['status']}."
         # Never silent: this fires only for a handler that supplied nothing at
         # all, whose author otherwise has no way to learn they're
         # non-compliant — the same "looks like it works but doesn't" trap this
@@ -1168,7 +1168,7 @@ def _work_phased_task(task: dict, handler: Callable[[dict], dict]) -> None:
     if not target:
         target, next_role = _next_phase(task.get("agent_flow"), task.get("status"))
     fallback = {field: _NOT_REPORTED for field, _flag in _HANDOFF_FIELDS}
-    fallback["done"] = (result.get("summary") or "Completed by openclaw handler.").strip()
+    fallback["done"] = (result.get("summary") or "Completed by spawnr-agent handler.").strip()
     fallback["for_next"] = next_role or (
         "A person should look at this task." if target == "blocked" else _NOT_REPORTED
     )
@@ -1277,7 +1277,7 @@ def _work_task(task: dict, handler: Callable[[dict], dict]) -> None:
     try:
         result = handler(task) or {
             "status": "done",
-            "summary": "Completed by openclaw handler.",
+            "summary": "Completed by spawnr-agent handler.",
         }
     except Exception as e:  # noqa: BLE001
         result = {
@@ -1553,7 +1553,7 @@ def main() -> None:
     )
     p.add_argument(
         "--timeout",
-        "--interval",  # the old name: the in-app OpenClaw docs card still sends it
+        "--interval",  # the old name, kept as an alias
         dest="timeout",
         type=int,
         default=30,
